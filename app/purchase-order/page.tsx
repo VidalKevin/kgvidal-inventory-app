@@ -10,7 +10,6 @@ import {
   Trash2,
   X,
   Save,
-  Copy,
 } from "lucide-react";
 
 const items = Array.from({ length: 10 }, (_, index) => ({
@@ -292,19 +291,6 @@ export default function PurchaseOrderPage() {
     );
   };
 
-  const copyRowQty = (rowId: number) => {
-    setEditingRows((prev) =>
-      prev.map((row) =>
-        row.id === rowId
-          ? {
-              ...row,
-              received: row.ordered,
-            }
-          : row
-      )
-    );
-  };
-
   const copyAllQty = () => {
     setEditingRows((prev) =>
       prev.map((row) => ({
@@ -577,7 +563,7 @@ export default function PurchaseOrderPage() {
 
       {editingPoNumber && poHeader && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-7xl rounded-2xl bg-white shadow-xl">
+          <div className="w-full max-w-6xl rounded-2xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">
@@ -640,15 +626,6 @@ export default function PurchaseOrderPage() {
                 <thead className="bg-slate-900 text-white">
                   <tr>
                     <th className="border border-slate-300 px-3 py-3 text-left">
-                      Vendor
-                    </th>
-                    <th className="border border-slate-300 px-3 py-3 text-left">
-                      Category
-                    </th>
-                    <th className="border border-slate-300 px-3 py-3 text-left">
-                      PO Number
-                    </th>
-                    <th className="border border-slate-300 px-3 py-3 text-left">
                       SKU
                     </th>
                     <th className="border border-slate-300 px-3 py-3 text-left">
@@ -672,9 +649,6 @@ export default function PurchaseOrderPage() {
                     <th className="border border-slate-300 px-3 py-3 text-left">
                       Amount
                     </th>
-                    <th className="border border-slate-300 px-3 py-3 text-left">
-                      Copy
-                    </th>
                   </tr>
                 </thead>
 
@@ -682,20 +656,13 @@ export default function PurchaseOrderPage() {
                   {editingRows.map((row) => (
                     <tr key={row.id}>
                       <td className="border border-slate-200 px-3 py-2">
-                        {row.vendor}
-                      </td>
-                      <td className="border border-slate-200 px-3 py-2">
-                        {row.category}
-                      </td>
-                      <td className="border border-slate-200 px-3 py-2">
-                        {row.poNumber}
-                      </td>
-                      <td className="border border-slate-200 px-3 py-2">
                         {row.sku}
                       </td>
+
                       <td className="border border-slate-200 px-3 py-2">
                         {row.itemDescription}
                       </td>
+
                       <td className="border border-slate-200 px-3 py-2">
                         <input
                           type="number"
@@ -710,6 +677,7 @@ export default function PurchaseOrderPage() {
                           className="w-24 rounded-md border border-slate-300 px-2 py-1"
                         />
                       </td>
+
                       <td className="border border-slate-200 px-3 py-2">
                         <input
                           type="number"
@@ -724,9 +692,11 @@ export default function PurchaseOrderPage() {
                           className="w-24 rounded-md border border-slate-300 px-2 py-1"
                         />
                       </td>
+
                       <td className="border border-slate-200 px-3 py-2 text-center">
                         {row.ordered - row.received}
                       </td>
+
                       <td className="border border-slate-200 px-3 py-2">
                         <select
                           value={row.status}
@@ -742,6 +712,7 @@ export default function PurchaseOrderPage() {
                           ))}
                         </select>
                       </td>
+
                       <td className="border border-slate-200 px-3 py-2">
                         <input
                           value={row.invoiceNumber}
@@ -755,6 +726,7 @@ export default function PurchaseOrderPage() {
                           className="w-28 rounded-md border border-slate-300 px-2 py-1"
                         />
                       </td>
+
                       <td className="border border-slate-200 px-3 py-2">
                         <input
                           type="number"
@@ -768,15 +740,6 @@ export default function PurchaseOrderPage() {
                           }
                           className="w-28 rounded-md border border-slate-300 px-2 py-1"
                         />
-                      </td>
-                      <td className="border border-slate-200 px-3 py-2">
-                        <button
-                          type="button"
-                          onClick={() => copyRowQty(row.id)}
-                          className="rounded-md border border-slate-300 p-2 hover:bg-slate-100"
-                        >
-                          <Copy size={15} />
-                        </button>
                       </td>
                     </tr>
                   ))}
