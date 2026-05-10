@@ -6,6 +6,8 @@ import { Search, Filter, Plus, Minus, Save, X } from "lucide-react";
 
 const PURCHASE_ORDERS_STORAGE_KEY = "kg_purchase_orders";
 
+type InventoryStatus = "Healthy" | "Low Stocks" | "Critical";
+
 type InventoryRow = {
   category: string;
   vendor: string;
@@ -18,7 +20,7 @@ type InventoryRow = {
   averageForecast: number;
   leadTime: string;
   needed: number;
-  status: "Healthy" | "Low Stocks" | "Critical";
+  status: InventoryStatus;
 };
 
 type PurchaseOrderRow = {
@@ -240,6 +242,21 @@ function getSuggestedApprovedQty(row: InventoryRow, minimumStockDays: number) {
   );
 }
 
+function getInventoryStatus(
+  row: InventoryRow,
+  minimumStockDays: number,
+  approvedQty: number
+): InventoryStatus {
+  if (approvedQty > 0) return "Healthy";
+
+  const stockDays = getStockLevelDays(row);
+
+  if (stockDays <= 15) return "Critical";
+  if (stockDays <= minimumStockDays) return "Low Stocks";
+
+  return "Healthy";
+}
+
 function getNextPoNumber(existingOrders: PurchaseOrderRow[]) {
   const maxNumber = existingOrders.reduce((max, order) => {
     const match = order.poNumber.match(/PO-(\d+)/);
@@ -265,6 +282,7 @@ function readSavedPurchaseOrders() {
 
 function writeSavedPurchaseOrders(rows: PurchaseOrderRow[]) {
   if (typeof window === "undefined") return;
+
   window.localStorage.setItem(
     PURCHASE_ORDERS_STORAGE_KEY,
     JSON.stringify(rows)
@@ -296,13 +314,17 @@ export default function InventoryPage() {
     []
   );
 
-  const statuses = useMemo(
-    () => Array.from(new Set(inventoryRows.map((item) => item.status))),
-    []
-  );
+  const statuses = ["All", "Healthy", "Low Stocks", "Critical"];
 
   const filteredRows = useMemo(() => {
     return inventoryRows.filter((item) => {
+      const approvedQty = Number(approvedQtyBySku[item.sku] ?? 0);
+      const computedStatus = getInventoryStatus(
+        item,
+        minimumStockDays,
+        approvedQty
+      );
+
       const query = search.toLowerCase();
 
       const matchesSearch =
@@ -310,15 +332,15 @@ export default function InventoryPage() {
         item.itemName.toLowerCase().includes(query) ||
         item.category.toLowerCase().includes(query) ||
         item.vendor.toLowerCase().includes(query) ||
-        item.status.toLowerCase().includes(query);
+        computedStatus.toLowerCase().includes(query);
 
       const matchesCategory = category === "All" || item.category === category;
       const matchesVendor = vendor === "All" || item.vendor === vendor;
-      const matchesStatus = status === "All" || item.status === status;
+      const matchesStatus = status === "All" || computedStatus === status;
 
       return matchesSearch && matchesCategory && matchesVendor && matchesStatus;
     });
-  }, [search, category, vendor, status]);
+  }, [search, category, vendor, status, minimumStockDays, approvedQtyBySku]);
 
   const rowsWithApprovedQty = useMemo(() => {
     return filteredRows.filter(
@@ -349,9 +371,15 @@ export default function InventoryPage() {
     setApprovedQty(item.sku, next);
   };
 
+  const useNeededQty = (item: InventoryRow) => {
+    const suggestedQty = getSuggestedApprovedQty(item, minimumStockDays);
+    setApprovedQty(item.sku, suggestedQty);
+  };
+
   const openCreatePoFromApproved = () => {
     const rows = rowsWithApprovedQty;
-    const vendorFromRows = vendor !== "All" ? vendor : rows[0]?.vendor ?? "Vendor 1";
+    const vendorFromRows =
+      vendor !== "All" ? vendor : rows[0]?.vendor ?? "Vendor 1";
 
     setNewVendor(vendorFromRows);
 
@@ -505,10 +533,10 @@ export default function InventoryPage() {
               Min Stock Days
               <input
                 type="number"
-                min={0}
+                min={16}
                 value={minimumStockDays}
                 onChange={(e) =>
-                  setMinimumStockDays(Math.max(0, Number(e.target.value) || 0))
+                  setMinimumStockDays(Math.max(16, Number(e.target.value) || 16))
                 }
                 className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-center text-sm outline-none focus:border-slate-900"
               />
@@ -554,7 +582,6 @@ export default function InventoryPage() {
               onChange={(e) => setStatus(e.target.value)}
               className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-900"
             >
-              <option value="All">All Status</option>
               {statuses.map((statusName) => (
                 <option key={statusName} value={statusName}>
                   {statusName}
@@ -637,6 +664,11 @@ export default function InventoryPage() {
                 const isInvalidMultiple =
                   approvedQty > 0 && approvedQty % multiple !== 0;
                 const neededQty = getComputedNeededQty(item, minimumStockDays);
+                const computedStatus = getInventoryStatus(
+                  item,
+                  minimumStockDays,
+                  approvedQty
+                );
 
                 return (
                   <tr
@@ -670,13 +702,20 @@ export default function InventoryPage() {
                     <td className="whitespace-nowrap px-4 py-4 text-right font-semibold tabular-nums">
                       {neededQty}
                     </td>
+
                     <td className="px-4 py-4 align-top">
-                      <div className="min-w-44">
-                        <div className="flex items-center gap-2">
+                      <div className="flex min-w-[230px] items-center gap-2">
+                        <div
+                          className={`flex overflow-hidden rounded-xl border bg-white ${
+                            isInvalidMultiple
+                              ? "border-red-300"
+                              : "border-slate-300"
+                          }`}
+                        >
                           <button
                             type="button"
                             onClick={() => bumpApprovedQty(item, -1)}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                            className="flex h-9 w-9 items-center justify-center border-r border-slate-300 text-slate-600 hover:bg-slate-100"
                             aria-label={`Decrease approved quantity for ${item.sku}`}
                           >
                             <Minus size={14} />
@@ -690,30 +729,37 @@ export default function InventoryPage() {
                             onChange={(e) =>
                               setApprovedQty(item.sku, Number(e.target.value))
                             }
-                            className={`h-8 w-24 rounded-lg border bg-white px-2 text-center text-sm outline-none ${
-                              isInvalidMultiple
-                                ? "border-red-300 bg-red-50"
-                                : "border-slate-300"
-                            }`}
+                            className="h-9 w-20 border-0 bg-white px-2 text-center text-sm font-semibold outline-none"
                           />
 
                           <button
                             type="button"
                             onClick={() => bumpApprovedQty(item, 1)}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                            className="flex h-9 w-9 items-center justify-center border-l border-slate-300 text-slate-600 hover:bg-slate-100"
                             aria-label={`Increase approved quantity for ${item.sku}`}
                           >
                             <Plus size={14} />
                           </button>
                         </div>
 
-                        {isInvalidMultiple && (
-                          <p className="mt-1 text-xs font-medium text-red-600">
-                            Should be multiple of {multiple}.
-                          </p>
+                        {neededQty > 0 && approvedQty === 0 && (
+                          <button
+                            type="button"
+                            onClick={() => useNeededQty(item)}
+                            className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                          >
+                            Use Needed
+                          </button>
                         )}
                       </div>
+
+                      {isInvalidMultiple && (
+                        <p className="mt-1 text-xs font-medium text-red-600">
+                          Multiple of {multiple} required.
+                        </p>
+                      )}
                     </td>
+
                     <td className="whitespace-nowrap px-4 py-4 text-right tabular-nums">
                       {formatMoney(item.cost)}
                     </td>
@@ -723,14 +769,14 @@ export default function InventoryPage() {
                     <td className="whitespace-nowrap px-4 py-4">
                       <span
                         className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                          item.status === "Healthy"
+                          computedStatus === "Healthy"
                             ? "bg-green-100 text-green-700"
-                            : item.status === "Low Stocks"
+                            : computedStatus === "Low Stocks"
                             ? "bg-yellow-100 text-yellow-700"
                             : "bg-red-100 text-red-700"
                         }`}
                       >
-                        {item.status}
+                        {computedStatus}
                       </span>
                     </td>
                   </tr>
