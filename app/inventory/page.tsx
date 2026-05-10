@@ -50,146 +50,16 @@ type NewOrderRow = {
 };
 
 const inventoryRows: InventoryRow[] = [
-  {
-    category: "Category 1",
-    vendor: "Vendor 1",
-    sku: "SKU-1001",
-    itemName: "Item 1",
-    uom: "PK",
-    qty: 12,
-    cost: 12.5,
-    currentInventory: 240,
-    averageForecast: 180,
-    leadTime: "7 Days",
-    needed: 60,
-    status: "Healthy",
-  },
-  {
-    category: "Category 2",
-    vendor: "Vendor 2",
-    sku: "SKU-1002",
-    itemName: "Item 2",
-    uom: "EA",
-    qty: 1,
-    cost: 18,
-    currentInventory: 40,
-    averageForecast: 120,
-    leadTime: "14 Days",
-    needed: 80,
-    status: "Low Stocks",
-  },
-  {
-    category: "Category 3",
-    vendor: "Vendor 3",
-    sku: "SKU-1003",
-    itemName: "Item 3",
-    uom: "PK",
-    qty: 15,
-    cost: 22.75,
-    currentInventory: 12,
-    averageForecast: 100,
-    leadTime: "21 Days",
-    needed: 88,
-    status: "Critical",
-  },
-  {
-    category: "Category 4",
-    vendor: "Vendor 1",
-    sku: "SKU-1004",
-    itemName: "Item 4",
-    uom: "EA",
-    qty: 1,
-    cost: 9.5,
-    currentInventory: 310,
-    averageForecast: 250,
-    leadTime: "10 Days",
-    needed: 40,
-    status: "Healthy",
-  },
-  {
-    category: "Category 5",
-    vendor: "Vendor 2",
-    sku: "SKU-1005",
-    itemName: "Item 5",
-    uom: "PK",
-    qty: 12,
-    cost: 15.25,
-    currentInventory: 90,
-    averageForecast: 140,
-    leadTime: "12 Days",
-    needed: 50,
-    status: "Low Stocks",
-  },
-  {
-    category: "Category 6",
-    vendor: "Vendor 3",
-    sku: "SKU-1006",
-    itemName: "Item 6",
-    uom: "EA",
-    qty: 1,
-    cost: 30,
-    currentInventory: 8,
-    averageForecast: 90,
-    leadTime: "30 Days",
-    needed: 82,
-    status: "Critical",
-  },
-  {
-    category: "Category 7",
-    vendor: "Vendor 1",
-    sku: "SKU-1007",
-    itemName: "Item 7",
-    uom: "PK",
-    qty: 15,
-    cost: 11.99,
-    currentInventory: 270,
-    averageForecast: 200,
-    leadTime: "9 Days",
-    needed: 30,
-    status: "Healthy",
-  },
-  {
-    category: "Category 8",
-    vendor: "Vendor 2",
-    sku: "SKU-1008",
-    itemName: "Item 8",
-    uom: "EA",
-    qty: 1,
-    cost: 24.5,
-    currentInventory: 55,
-    averageForecast: 115,
-    leadTime: "15 Days",
-    needed: 60,
-    status: "Low Stocks",
-  },
-  {
-    category: "Category 9",
-    vendor: "Vendor 3",
-    sku: "SKU-1009",
-    itemName: "Item 9",
-    uom: "PK",
-    qty: 12,
-    cost: 17.75,
-    currentInventory: 5,
-    averageForecast: 75,
-    leadTime: "28 Days",
-    needed: 70,
-    status: "Critical",
-  },
-  {
-    category: "Category 10",
-    vendor: "Vendor 1",
-    sku: "SKU-1010",
-    itemName: "Item 10",
-    uom: "EA",
-    qty: 1,
-    cost: 28,
-    currentInventory: 190,
-    averageForecast: 150,
-    leadTime: "11 Days",
-    needed: 20,
-    status: "Healthy",
-  },
+  { category: "Category 1", vendor: "Vendor 1", sku: "SKU-1001", itemName: "Item 1", uom: "PK", qty: 12, cost: 12.5, currentInventory: 240, averageForecast: 180, leadTime: "7 Days", needed: 60, status: "Healthy" },
+  { category: "Category 2", vendor: "Vendor 2", sku: "SKU-1002", itemName: "Item 2", uom: "EA", qty: 1, cost: 18, currentInventory: 40, averageForecast: 120, leadTime: "14 Days", needed: 80, status: "Low Stocks" },
+  { category: "Category 3", vendor: "Vendor 3", sku: "SKU-1003", itemName: "Item 3", uom: "PK", qty: 15, cost: 22.75, currentInventory: 12, averageForecast: 100, leadTime: "21 Days", needed: 88, status: "Critical" },
+  { category: "Category 4", vendor: "Vendor 1", sku: "SKU-1004", itemName: "Item 4", uom: "EA", qty: 1, cost: 9.5, currentInventory: 310, averageForecast: 250, leadTime: "10 Days", needed: 40, status: "Healthy" },
+  { category: "Category 5", vendor: "Vendor 2", sku: "SKU-1005", itemName: "Item 5", uom: "PK", qty: 12, cost: 15.25, currentInventory: 90, averageForecast: 140, leadTime: "12 Days", needed: 50, status: "Low Stocks" },
+  { category: "Category 6", vendor: "Vendor 3", sku: "SKU-1006", itemName: "Item 6", uom: "EA", qty: 1, cost: 30, currentInventory: 8, averageForecast: 90, leadTime: "30 Days", needed: 82, status: "Critical" },
+  { category: "Category 7", vendor: "Vendor 1", sku: "SKU-1007", itemName: "Item 7", uom: "PK", qty: 15, cost: 11.99, currentInventory: 270, averageForecast: 200, leadTime: "9 Days", needed: 30, status: "Healthy" },
+  { category: "Category 8", vendor: "Vendor 2", sku: "SKU-1008", itemName: "Item 8", uom: "EA", qty: 1, cost: 24.5, currentInventory: 55, averageForecast: 115, leadTime: "15 Days", needed: 60, status: "Low Stocks" },
+  { category: "Category 9", vendor: "Vendor 3", sku: "SKU-1009", itemName: "Item 9", uom: "PK", qty: 12, cost: 17.75, currentInventory: 5, averageForecast: 75, leadTime: "28 Days", needed: 70, status: "Critical" },
+  { category: "Category 10", vendor: "Vendor 1", sku: "SKU-1010", itemName: "Item 10", uom: "EA", qty: 1, cost: 28, currentInventory: 190, averageForecast: 150, leadTime: "11 Days", needed: 20, status: "Healthy" },
 ];
 
 const customers = ["Customer 1", "Customer 2", "Customer 3"];
@@ -228,18 +98,6 @@ function getComputedNeededQty(row: InventoryRow, minimumStockDays: number) {
 
 function getOrderMultiple(row: InventoryRow) {
   return row.uom === "EA" ? 1 : row.qty;
-}
-
-function roundUpToMultiple(value: number, multiple: number) {
-  if (multiple <= 1) return Math.max(0, Math.ceil(value));
-  return Math.max(0, Math.ceil(value / multiple) * multiple);
-}
-
-function getSuggestedApprovedQty(row: InventoryRow, minimumStockDays: number) {
-  return roundUpToMultiple(
-    getComputedNeededQty(row, minimumStockDays),
-    getOrderMultiple(row)
-  );
 }
 
 function getInventoryStatus(
@@ -295,6 +153,9 @@ export default function InventoryPage() {
   const [vendor, setVendor] = useState("All");
   const [status, setStatus] = useState("All");
   const [minimumStockDays, setMinimumStockDays] = useState(30);
+  const [activeApprovedSku, setActiveApprovedSku] = useState<string | null>(
+    null
+  );
   const [approvedQtyBySku, setApprovedQtyBySku] = useState<
     Record<string, number>
   >({});
@@ -371,11 +232,6 @@ export default function InventoryPage() {
     setApprovedQty(item.sku, next);
   };
 
-  const useNeededQty = (item: InventoryRow) => {
-    const suggestedQty = getSuggestedApprovedQty(item, minimumStockDays);
-    setApprovedQty(item.sku, suggestedQty);
-  };
-
   const openCreatePoFromApproved = () => {
     const rows = rowsWithApprovedQty;
     const vendorFromRows =
@@ -416,10 +272,9 @@ export default function InventoryPage() {
           );
 
           if (selectedItem) {
-            const ordered = getSuggestedApprovedQty(
-              selectedItem,
-              minimumStockDays
-            );
+            const ordered =
+              Number(approvedQtyBySku[selectedItem.sku] ?? 0) ||
+              getOrderMultiple(selectedItem);
 
             return {
               ...row,
@@ -670,6 +525,8 @@ export default function InventoryPage() {
                   approvedQty
                 );
 
+                const isActive = activeApprovedSku === item.sku;
+
                 return (
                   <tr
                     key={item.sku}
@@ -704,53 +561,51 @@ export default function InventoryPage() {
                     </td>
 
                     <td className="px-4 py-4 align-top">
-                      <div className="flex min-w-[230px] items-center gap-2">
+                      <div className="flex min-w-[120px] items-center">
                         <div
                           className={`flex overflow-hidden rounded-xl border bg-white ${
                             isInvalidMultiple
                               ? "border-red-300"
+                              : isActive
+                              ? "border-slate-900"
                               : "border-slate-300"
                           }`}
                         >
-                          <button
-                            type="button"
-                            onClick={() => bumpApprovedQty(item, -1)}
-                            className="flex h-9 w-9 items-center justify-center border-r border-slate-300 text-slate-600 hover:bg-slate-100"
-                            aria-label={`Decrease approved quantity for ${item.sku}`}
-                          >
-                            <Minus size={14} />
-                          </button>
+                          {isActive && (
+                            <button
+                              type="button"
+                              onClick={() => bumpApprovedQty(item, -1)}
+                              className="flex h-9 w-9 items-center justify-center border-r border-slate-300 text-slate-600 hover:bg-slate-100"
+                              aria-label={`Decrease approved quantity for ${item.sku}`}
+                            >
+                              <Minus size={14} />
+                            </button>
+                          )}
 
                           <input
                             type="number"
                             min={0}
                             step={multiple}
                             value={approvedQty}
+                            onFocus={() => setActiveApprovedSku(item.sku)}
+                            onClick={() => setActiveApprovedSku(item.sku)}
                             onChange={(e) =>
                               setApprovedQty(item.sku, Number(e.target.value))
                             }
                             className="h-9 w-20 border-0 bg-white px-2 text-center text-sm font-semibold outline-none"
                           />
 
-                          <button
-                            type="button"
-                            onClick={() => bumpApprovedQty(item, 1)}
-                            className="flex h-9 w-9 items-center justify-center border-l border-slate-300 text-slate-600 hover:bg-slate-100"
-                            aria-label={`Increase approved quantity for ${item.sku}`}
-                          >
-                            <Plus size={14} />
-                          </button>
+                          {isActive && (
+                            <button
+                              type="button"
+                              onClick={() => bumpApprovedQty(item, 1)}
+                              className="flex h-9 w-9 items-center justify-center border-l border-slate-300 text-slate-600 hover:bg-slate-100"
+                              aria-label={`Increase approved quantity for ${item.sku}`}
+                            >
+                              <Plus size={14} />
+                            </button>
+                          )}
                         </div>
-
-                        {neededQty > 0 && approvedQty === 0 && (
-                          <button
-                            type="button"
-                            onClick={() => useNeededQty(item)}
-                            className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                          >
-                            Use Needed
-                          </button>
-                        )}
                       </div>
 
                       {isInvalidMultiple && (
@@ -763,9 +618,11 @@ export default function InventoryPage() {
                     <td className="whitespace-nowrap px-4 py-4 text-right tabular-nums">
                       {formatMoney(item.cost)}
                     </td>
+
                     <td className="whitespace-nowrap px-4 py-4 text-right font-semibold tabular-nums">
                       {formatMoney(approvedQty * item.cost)}
                     </td>
+
                     <td className="whitespace-nowrap px-4 py-4">
                       <span
                         className={`rounded-full px-3 py-1 text-xs font-semibold ${
