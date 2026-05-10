@@ -408,12 +408,20 @@ export default function InventoryPage() {
                     <td className="whitespace-nowrap px-4 py-4 text-right tabular-nums">{getLeadTimeDays(item)} days</td>
                     <td className="whitespace-nowrap px-4 py-4 text-right tabular-nums">{getStockLevelDays(item)}</td>
                     <td className="whitespace-nowrap px-4 py-4 text-right font-semibold tabular-nums">{neededQty}</td>
-                    <td className="px-4 py-4">
-                      <div className="flex min-w-40 flex-col gap-2">
+                    <td className="px-4 py-4 align-top">
+                      <div className="relative min-w-44">
                         <div className="flex items-center gap-2">
                           {isActive && (
-                            <button type="button" onClick={() => bumpApprovedQty(item, -1)} className="rounded-lg border border-slate-300 p-1.5 hover:bg-slate-100"><Minus size={14} /></button>
+                            <button
+                              type="button"
+                              onClick={() => bumpApprovedQty(item, -1)}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                              aria-label={`Decrease approved quantity for ${item.sku}`}
+                            >
+                              <Minus size={14} />
+                            </button>
                           )}
+
                           <input
                             type="number"
                             min={0}
@@ -422,27 +430,70 @@ export default function InventoryPage() {
                             onFocus={() => setActiveApprovedSku(item.sku)}
                             onClick={() => setActiveApprovedSku(item.sku)}
                             onChange={(e) => setApprovedQty(item.sku, Number(e.target.value))}
-                            className={`w-20 rounded-lg border px-2 py-1.5 text-center text-sm outline-none ${isInvalidMultiple ? "border-red-300 bg-red-50" : isActive ? "border-slate-900" : "border-slate-300"}`}
+                            className={`h-8 w-24 rounded-lg border bg-white px-2 text-center text-sm outline-none ${isInvalidMultiple ? "border-red-300 bg-red-50" : isActive ? "border-slate-900" : "border-slate-300"}`}
                           />
+
                           {isActive && (
-                            <button type="button" onClick={() => bumpApprovedQty(item, 1)} className="rounded-lg border border-slate-300 p-1.5 hover:bg-slate-100"><Plus size={14} /></button>
+                            <button
+                              type="button"
+                              onClick={() => bumpApprovedQty(item, 1)}
+                              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                              aria-label={`Increase approved quantity for ${item.sku}`}
+                            >
+                              <Plus size={14} />
+                            </button>
                           )}
                         </div>
 
                         {isActive && (
-                          <div className="flex flex-wrap gap-1">
-                            {getQtyOptions(item).slice(0, 5).map((option) => (
-                              <button key={option} type="button" onClick={() => setApprovedQty(item.sku, option)} className="rounded-full border border-slate-200 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-100">
-                                {option}
+                          <div className="absolute left-0 top-10 z-30 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+                            <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-2">
+                              <span className="text-xs font-semibold text-slate-500">Quick select</span>
+                              <button
+                                type="button"
+                                onClick={() => setActiveApprovedSku(null)}
+                                className="rounded-md px-1.5 py-0.5 text-xs text-slate-500 hover:bg-slate-100"
+                              >
+                                Close
                               </button>
-                            ))}
-                            <button type="button" onClick={() => setApprovedQty(item.sku, suggestedQty)} className="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white">
-                              Suggest {suggestedQty}
+                            </div>
+
+                            <div className="grid grid-cols-4 gap-1.5">
+                              {getQtyOptions(item).map((option) => (
+                                <button
+                                  key={option}
+                                  type="button"
+                                  onMouseDown={(event) => event.preventDefault()}
+                                  onClick={() => {
+                                    setApprovedQty(item.sku, option);
+                                    setActiveApprovedSku(null);
+                                  }}
+                                  className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:border-slate-900 hover:bg-slate-50"
+                                >
+                                  {option}
+                                </button>
+                              ))}
+                            </div>
+
+                            <button
+                              type="button"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => {
+                                setApprovedQty(item.sku, suggestedQty);
+                                setActiveApprovedSku(null);
+                              }}
+                              className="mt-2 w-full rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                            >
+                              Use suggested: {suggestedQty}
                             </button>
+
+                            {isInvalidMultiple && (
+                              <p className="mt-2 text-xs font-medium text-red-600">
+                                Must be multiple of {multiple}
+                              </p>
+                            )}
                           </div>
                         )}
-
-                        {isActive && isInvalidMultiple && <p className="text-xs font-medium text-red-600">Must be multiple of {multiple}</p>}
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-4 text-right tabular-nums">{formatMoney(item.cost)}</td>
