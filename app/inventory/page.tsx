@@ -393,7 +393,6 @@ export default function InventoryPage() {
                 const approvedQty = Number(approvedQtyBySku[item.sku] ?? 0);
                 const multiple = getOrderMultiple(item);
                 const isInvalidMultiple = approvedQty > 0 && approvedQty % multiple !== 0;
-                const suggestedQty = getSuggestedApprovedQty(item, minimumStockDays);
                 const neededQty = getComputedNeededQty(item, minimumStockDays);
                 const isActive = activeApprovedSku === item.sku;
 
@@ -445,10 +444,16 @@ export default function InventoryPage() {
                           )}
                         </div>
 
+                        {isInvalidMultiple && !isActive && (
+                          <p className="mt-1 text-xs font-medium text-red-600">
+                            Should be multiple of {multiple}.
+                          </p>
+                        )}
+
                         {isActive && (
                           <div className="absolute left-0 top-10 z-30 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
                             <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-2">
-                              <span className="text-xs font-semibold text-slate-500">Quick select</span>
+                              <span className="text-xs font-semibold text-slate-500">Select approved qty</span>
                               <button
                                 type="button"
                                 onClick={() => setActiveApprovedSku(null)}
@@ -475,21 +480,9 @@ export default function InventoryPage() {
                               ))}
                             </div>
 
-                            <button
-                              type="button"
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() => {
-                                setApprovedQty(item.sku, suggestedQty);
-                                setActiveApprovedSku(null);
-                              }}
-                              className="mt-2 w-full rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
-                            >
-                              Use suggested: {suggestedQty}
-                            </button>
-
                             {isInvalidMultiple && (
-                              <p className="mt-2 text-xs font-medium text-red-600">
-                                Must be multiple of {multiple}
+                              <p className="mt-2 rounded-lg bg-red-50 px-2 py-1.5 text-xs font-medium text-red-600">
+                                Approved qty should be a multiple of {multiple}.
                               </p>
                             )}
                           </div>
