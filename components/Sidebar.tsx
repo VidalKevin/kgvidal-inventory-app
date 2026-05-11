@@ -112,10 +112,10 @@ export default function Sidebar() {
   const isActive = (href: string) => pathname === href;
 
   return (
-    <aside className="w-72 min-h-screen bg-slate-900 text-slate-300">
-      <div className="flex h-full flex-col">
+    <aside className="w-72 bg-slate-900 text-slate-300 flex flex-col self-stretch min-h-screen">
+      <div className="flex flex-col h-full flex-1">
         <div className="border-b border-slate-800 px-6 py-5">
-          <h1 className="text-xl font-bold text-white">KG Inventory</h1>
+          <h1 className="text-xl font-bold text-white">Inventory</h1>
           <p className="mt-1 text-sm text-slate-400">Management Portal</p>
         </div>
 
