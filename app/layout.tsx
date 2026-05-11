@@ -20,9 +20,9 @@ export default function RootLayout({
           <div className="fixed left-0 top-0 h-screen w-72 bg-slate-900 z-40">
             <Sidebar />
           </div>
-          <div className="flex flex-1 flex-col ml-72 bg-white min-h-screen">
+          <div className="flex flex-1 flex-col ml-72 bg-white">
             <Header />
-            <main className="flex-1 bg-white p-8">
+            <main className="flex-1 bg-white p-8 min-h-screen">
               {children}
             </main>
           </div>
