@@ -4,7 +4,7 @@ export default function Header() {
       <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            KG Inventory
+            Vidal Inventory Dashboard
           </p>
           <h2 className="text-lg font-semibold text-slate-900">
             Inventory Management
