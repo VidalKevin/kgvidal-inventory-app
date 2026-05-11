@@ -77,81 +77,79 @@ export default function Sidebar() {
   const isActive = (href: string) => pathname === href;
 
   return (
-    <aside className="w-72 bg-slate-900 text-slate-300 flex flex-col self-stretch min-h-screen sticky top-0">
-      <div className="flex flex-col h-full">
-        <div className="border-b border-slate-800 px-6 py-5">
-          <h1 className="text-xl font-bold text-white">Inventory</h1>
-          <p className="mt-1 text-sm text-slate-400">Management Portal</p>
-        </div>
-
-        <nav className="flex-1 space-y-1 px-4 py-5">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-
-            if (item.href) {
-              return (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition ${
-                    isActive(item.href)
-                      ? "bg-white text-slate-900 shadow-sm"
-                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                  }`}
-                >
-                  <Icon size={20} />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            }
-
-            const isOpen = openMenus[item.label];
-
-            return (
-              <div key={item.label}>
-                <button
-                  type="button"
-                  onClick={() => toggleMenu(item.label)}
-                  className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
-                >
-                  <span className="flex items-center gap-3">
-                    <Icon size={20} />
-                    {item.label}
-                  </span>
-                  {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                </button>
-
-                {isOpen && (
-                  <div className="mt-1 space-y-1 pl-4">
-                    {item.children?.map((child) => {
-                      const ChildIcon = child.icon;
-                      return (
-                        <Link
-                          key={child.href}
-                          href={child.href}
-                          className={`flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm transition ${
-                            isActive(child.href)
-                              ? "bg-white text-slate-900 shadow-sm"
-                              : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                          }`}
-                        >
-                          <ChildIcon size={18} />
-                          <span>{child.label}</span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </nav>
-
-        <div className="border-t border-slate-800 px-6 py-4">
-          <p className="text-xs text-slate-500">Logged in as</p>
-          <p className="text-sm font-medium text-white">Admin</p>
-        </div>
+    <div className="flex h-full w-full flex-col bg-slate-900 text-slate-300">
+      <div className="border-b border-slate-800 px-6 py-5">
+        <h1 className="text-xl font-bold text-white">Inventory</h1>
+        <p className="mt-1 text-sm text-slate-400">Management Portal</p>
       </div>
-    </aside>
+
+      <nav className="flex-1 space-y-1 px-4 py-5">
+        {menuItems.map((item) => {
+          const Icon = item.icon;
+
+          if (item.href) {
+            return (
+              <Link
+                key={item.label}
+                href={item.href}
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition ${
+                  isActive(item.href)
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                }`}
+              >
+                <Icon size={20} />
+                <span>{item.label}</span>
+              </Link>
+            );
+          }
+
+          const isOpen = openMenus[item.label];
+
+          return (
+            <div key={item.label}>
+              <button
+                type="button"
+                onClick={() => toggleMenu(item.label)}
+                className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+              >
+                <span className="flex items-center gap-3">
+                  <Icon size={20} />
+                  {item.label}
+                </span>
+                {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+              </button>
+
+              {isOpen && (
+                <div className="mt-1 space-y-1 pl-4">
+                  {item.children?.map((child) => {
+                    const ChildIcon = child.icon;
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        className={`flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm transition ${
+                          isActive(child.href)
+                            ? "bg-white text-slate-900 shadow-sm"
+                            : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                        }`}
+                      >
+                        <ChildIcon size={18} />
+                        <span>{child.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+
+      <div className="border-t border-slate-800 px-6 py-4">
+        <p className="text-xs text-slate-500">Logged in as</p>
+        <p className="text-sm font-medium text-white">Admin</p>
+      </div>
+    </div>
   );
 }
