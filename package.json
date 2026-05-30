@@ -2,14 +2,13 @@
   "name": "kgvidal-inventory-app",
   "version": "0.1.0",
   "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "opennextjs-cloudflare build",
-    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-    "next-build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+    "scripts": {
+      "dev": "next dev",
+      "build": "next build",
+      "start": "next start",
+      "lint": "eslint",
+      "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy"
+    }
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.19.11",
