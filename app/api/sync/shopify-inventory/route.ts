@@ -93,7 +93,7 @@ function getRequiredEnv(name: string) {
 
 function getSupabaseAdmin() {
   const supabaseUrl = getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL");
-  const supabaseServiceRoleKey = getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY");
+  const supabaseServiceRoleKey = getRequiredEnv("NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY");
 
   return createClient(supabaseUrl, supabaseServiceRoleKey, {
     auth: {
@@ -104,9 +104,9 @@ function getSupabaseAdmin() {
 }
 
 async function getShopifyAccessToken() {
-  const shop = getRequiredEnv("SHOPIFY_STORE_DOMAIN");
-  const clientId = getRequiredEnv("SHOPIFY_CLIENT_ID");
-  const clientSecret = getRequiredEnv("SHOPIFY_CLIENT_SECRET");
+  const shop = getRequiredEnv("NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN");
+  const clientId = getRequiredEnv("NEXT_PUBLIC_SHOPIFY_CLIENT_ID");
+  const clientSecret = getRequiredEnv("NEXT_PUBLIC_SHOPIFY_CLIENT_SECRET");
 
   const response = await fetch(`https://${shop}/admin/oauth/access_token`, {
     method: "POST",
@@ -139,7 +139,7 @@ async function shopifyGraphQL<T>(
   query: string,
   variables: Record<string, unknown> = {}
 ) {
-  const shop = getRequiredEnv("SHOPIFY_STORE_DOMAIN");
+  const shop = getRequiredEnv("NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN");
 
   const response = await fetch(
     `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
