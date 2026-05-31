@@ -175,11 +175,12 @@ async function getInventoryRows(accessToken: string) {
   let hasNextPage = true;
 
   while (hasNextPage) {
-    const data = await shopifyGraphQL<ShopifyInventoryResponse>(
-      accessToken,
-      INVENTORY_QUERY,
-      { cursor }
-    );
+    const data: ShopifyInventoryResponse =
+  await shopifyGraphQL<ShopifyInventoryResponse>(
+    accessToken,
+    INVENTORY_QUERY,
+    { cursor }
+  );
 
     for (const edge of data.productVariants.edges) {
       const variant = edge.node;
