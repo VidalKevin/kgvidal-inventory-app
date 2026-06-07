@@ -1,6 +1,8 @@
 ﻿node_modules
 .next
+.netlify
+.wrangler
 .env
 .env.local
-.wrangler
 dev-server.log
+tsconfig.tsbuildinfo
