@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { ArrowLeft, Mail, Plus, Save, Trash2 } from "lucide-react";
 import PageTitle from "@/components/PageTitle";
 
@@ -21,6 +21,8 @@ type VendorRow = {
   phone: string;
   settings?: VendorSettings | null;
 };
+
+type VendorForm = Omit<VendorRow, "id" | "settings">;
 
 type TableColumn = {
   header: string;
@@ -46,6 +48,20 @@ const FIELD_OPTIONS = [
   "Brand",
   "Barcode",
   "Notes",
+];
+
+const detailFields: Array<{ key: keyof VendorForm; label: string }> = [
+  { key: "mfg", label: "MFG" },
+  { key: "code", label: "Code" },
+  { key: "lead_time", label: "Lead Time" },
+  { key: "review_period", label: "Review Period" },
+  { key: "order_at", label: "Order At" },
+  { key: "link", label: "Link" },
+  { key: "username", label: "Username" },
+  { key: "password", label: "Password" },
+  { key: "contact", label: "Contact" },
+  { key: "email", label: "Email" },
+  { key: "phone", label: "Phone" },
 ];
 
 const defaultColumns: TableColumn[] = [
@@ -102,16 +118,43 @@ function normalizeSettings(
   };
 }
 
+function vendorToForm(vendor: VendorRow): VendorForm {
+  return {
+    mfg: vendor.mfg || "",
+    code: vendor.code || "",
+    lead_time: vendor.lead_time || "",
+    review_period: vendor.review_period || "",
+    order_at: vendor.order_at || "",
+    link: vendor.link || "",
+    username: vendor.username || "",
+    password: vendor.password || "",
+    contact: vendor.contact || "",
+    email: vendor.email || "",
+    phone: vendor.phone || "",
+  };
+}
+
+function getUniqueOptions(vendors: VendorRow[], key: keyof VendorForm) {
+  return Array.from(
+    new Set(
+      vendors
+        .map((vendor) => String(vendor[key] || "").trim())
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b));
+}
+
 export default function VendorSettingsPage() {
   const params = useParams();
-  const router = useRouter();
 
   const vendorId = useMemo(() => {
     const rawId = params?.id;
     return Array.isArray(rawId) ? rawId[0] : rawId;
   }, [params]);
 
+  const [allVendors, setAllVendors] = useState<VendorRow[]>([]);
   const [vendor, setVendor] = useState<VendorRow | null>(null);
+  const [vendorForm, setVendorForm] = useState<VendorForm | null>(null);
   const [settings, setSettings] = useState<VendorSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -123,7 +166,7 @@ export default function VendorSettingsPage() {
   useEffect(() => {
     let ignore = false;
 
-    async function loadVendor() {
+    async function loadData() {
       if (!vendorId || vendorId === "undefined") {
         setMessage({
           type: "error",
@@ -134,22 +177,31 @@ export default function VendorSettingsPage() {
       }
 
       try {
-        const response = await fetch(`/api/vendor-list/${vendorId}`);
-        const data = await response.json();
+        const [vendorResponse, vendorsResponse] = await Promise.all([
+          fetch(`/api/vendor-list/${vendorId}`),
+          fetch("/api/vendor-list"),
+        ]);
 
-        if (!response.ok) {
-          throw new Error(data.error || "Unable to load vendor settings.");
+        const vendorData = await vendorResponse.json();
+        const vendorsData = await vendorsResponse.json();
+
+        if (!vendorResponse.ok) {
+          throw new Error(vendorData.error || "Unable to load vendor.");
         }
 
-        if (!data.vendor?.id) {
+        if (!vendorData.vendor?.id) {
           throw new Error(
             "The selected vendor settings page is not linked to a valid vendor record."
           );
         }
 
         if (!ignore) {
-          setVendor(data.vendor);
-          setSettings(normalizeSettings(data.vendor, data.vendor.settings));
+          setVendor(vendorData.vendor);
+          setVendorForm(vendorToForm(vendorData.vendor));
+          setSettings(
+            normalizeSettings(vendorData.vendor, vendorData.vendor.settings)
+          );
+          setAllVendors(vendorsData.vendors || []);
         }
       } catch (error) {
         if (!ignore) {
@@ -162,65 +214,84 @@ export default function VendorSettingsPage() {
           });
         }
       } finally {
-        if (!ignore) {
-          setLoading(false);
-        }
+        if (!ignore) setLoading(false);
       }
     }
 
-    loadVendor();
+    loadData();
 
     return () => {
       ignore = true;
     };
   }, [vendorId]);
 
+  const leadTimeOptions = useMemo(
+    () => getUniqueOptions(allVendors, "lead_time"),
+    [allVendors]
+  );
+
+  const reviewPeriodOptions = useMemo(
+    () => getUniqueOptions(allVendors, "review_period"),
+    [allVendors]
+  );
+
+  const orderAtOptions = useMemo(
+    () => getUniqueOptions(allVendors, "order_at"),
+    [allVendors]
+  );
+
+  const updateVendorForm = (key: keyof VendorForm, value: string) => {
+    setVendorForm((current) =>
+      current ? { ...current, [key]: value } : current
+    );
+  };
+
   const updateColumn = (
     index: number,
     key: keyof TableColumn,
     value: string
   ) => {
-    setSettings((current) => {
-      if (!current) return current;
-
-      return {
-        ...current,
-        tableColumns: current.tableColumns.map((column, columnIndex) =>
-          columnIndex === index ? { ...column, [key]: value } : column
-        ),
-      };
-    });
+    setSettings((current) =>
+      current
+        ? {
+            ...current,
+            tableColumns: current.tableColumns.map((column, columnIndex) =>
+              columnIndex === index ? { ...column, [key]: value } : column
+            ),
+          }
+        : current
+    );
   };
 
   const addColumn = () => {
-    setSettings((current) => {
-      if (!current) return current;
-
-      return {
-        ...current,
-        tableColumns: [
-          ...current.tableColumns,
-          { header: "", field: FIELD_OPTIONS[0] },
-        ],
-      };
-    });
+    setSettings((current) =>
+      current
+        ? {
+            ...current,
+            tableColumns: [
+              ...current.tableColumns,
+              { header: "", field: FIELD_OPTIONS[0] },
+            ],
+          }
+        : current
+    );
   };
 
   const removeColumn = (index: number) => {
-    setSettings((current) => {
-      if (!current) return current;
-
-      return {
-        ...current,
-        tableColumns: current.tableColumns.filter(
-          (_column, columnIndex) => columnIndex !== index
-        ),
-      };
-    });
+    setSettings((current) =>
+      current
+        ? {
+            ...current,
+            tableColumns: current.tableColumns.filter(
+              (_column, columnIndex) => columnIndex !== index
+            ),
+          }
+        : current
+    );
   };
 
   const saveSettings = async () => {
-    if (!vendor || !settings) return;
+    if (!vendor || !vendorForm || !settings) return;
 
     setSaving(true);
     setMessage(null);
@@ -232,7 +303,7 @@ export default function VendorSettingsPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          ...vendor,
+          ...vendorForm,
           settings,
         }),
       });
@@ -240,19 +311,17 @@ export default function VendorSettingsPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Unable to save vendor settings.");
+        throw new Error(data.error || "Unable to save vendor.");
       }
 
       setVendor(data.vendor);
+      setVendorForm(vendorToForm(data.vendor));
       setSettings(normalizeSettings(data.vendor, data.vendor.settings));
-      setMessage({ type: "success", text: "Vendor settings saved." });
+      setMessage({ type: "success", text: "Vendor details saved." });
     } catch (error) {
       setMessage({
         type: "error",
-        text:
-          error instanceof Error
-            ? error.message
-            : "Unable to save vendor settings.",
+        text: error instanceof Error ? error.message : "Unable to save vendor.",
       });
     } finally {
       setSaving(false);
@@ -262,24 +331,15 @@ export default function VendorSettingsPage() {
   if (loading) {
     return (
       <section className="space-y-4">
-        <PageTitle
-          title="Vendor Settings"
-          description="Loading vendor settings..."
-        />
-        <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
-          Loading...
-        </div>
+        <PageTitle title="Vendor Settings" description="Loading..." />
       </section>
     );
   }
 
-  if (!vendor || !settings) {
+  if (!vendor || !vendorForm || !settings) {
     return (
       <section className="space-y-4">
-        <PageTitle
-          title="Vendor Settings"
-          description="Unable to load this vendor."
-        />
+        <PageTitle title="Vendor Settings" description="Unable to load vendor." />
 
         {message && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
@@ -302,8 +362,8 @@ export default function VendorSettingsPage() {
     <section className="space-y-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <PageTitle
-          title={`${vendor.mfg} Settings`}
-          description="Configure vendor email templates, table columns, and ordering details."
+          title={`${vendorForm.mfg || "Vendor"} Settings`}
+          description="Edit vendor details, email templates, and table columns."
         />
 
         <div className="flex flex-wrap gap-2">
@@ -322,7 +382,7 @@ export default function VendorSettingsPage() {
             className="inline-flex h-9 items-center gap-2 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Save size={14} />
-            {saving ? "Saving..." : "Save Settings"}
+            {saving ? "Saving..." : "Save Changes"}
           </button>
         </div>
       </div>
@@ -347,19 +407,19 @@ export default function VendorSettingsPage() {
 
           <div className="flex gap-2">
             <a
-              href={`mailto:${vendor.email}`}
+              href={`mailto:${vendorForm.email}`}
               className="inline-flex h-8 items-center gap-2 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100"
             >
               <Mail size={14} />
               Email Order Vendor
             </a>
 
-            {vendor.link && (
+            {vendorForm.link && (
               <a
                 href={
-                  vendor.link.startsWith("http")
-                    ? vendor.link
-                    : `https://${vendor.link}`
+                  vendorForm.link.startsWith("http")
+                    ? vendorForm.link
+                    : `https://${vendorForm.link}`
                 }
                 target="_blank"
                 rel="noreferrer"
@@ -372,17 +432,44 @@ export default function VendorSettingsPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
-          <Detail label="MFG" value={vendor.mfg} />
-          <Detail label="Code" value={vendor.code} />
-          <Detail label="Lead Time" value={vendor.lead_time} />
-          <Detail label="Review Period" value={vendor.review_period} />
-          <Detail label="Order At" value={vendor.order_at} />
-          <Detail label="Link" value={vendor.link} />
-          <Detail label="Username" value={vendor.username} />
-          <Detail label="Password" value={vendor.password} />
-          <Detail label="Contact" value={vendor.contact} />
-          <Detail label="Email" value={vendor.email} />
-          <Detail label="Phone" value={vendor.phone} />
+          {detailFields.map((field) => {
+            const listId = `vendor-detail-${field.key}-options`;
+
+            const options =
+              field.key === "lead_time"
+                ? leadTimeOptions
+                : field.key === "review_period"
+                  ? reviewPeriodOptions
+                  : field.key === "order_at"
+                    ? orderAtOptions
+                    : [];
+
+            return (
+              <div key={field.key}>
+                <label className="text-xs font-semibold uppercase text-slate-500">
+                  {field.label}
+                </label>
+
+                <input
+                  type="text"
+                  list={options.length ? listId : undefined}
+                  value={vendorForm[field.key]}
+                  onChange={(event) =>
+                    updateVendorForm(field.key, event.target.value)
+                  }
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-slate-900"
+                />
+
+                {options.length > 0 && (
+                  <datalist id={listId}>
+                    {options.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -412,27 +499,22 @@ export default function VendorSettingsPage() {
                 current ? { ...current, emailBody: event.target.value } : current
               )
             }
-            rows={9}
+            rows={8}
             className="w-full rounded-lg border border-slate-300 px-3 py-3 text-sm outline-none focus:border-slate-900"
           />
 
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase text-slate-500">
-              PDF Email Body
-            </label>
-            <textarea
-              value={settings.pdfEmailBody}
-              onChange={(event) =>
-                setSettings((current) =>
-                  current
-                    ? { ...current, pdfEmailBody: event.target.value }
-                    : current
-                )
-              }
-              rows={5}
-              className="w-full rounded-lg border border-slate-300 px-3 py-3 text-sm outline-none focus:border-slate-900"
-            />
-          </div>
+          <textarea
+            value={settings.pdfEmailBody}
+            onChange={(event) =>
+              setSettings((current) =>
+                current
+                  ? { ...current, pdfEmailBody: event.target.value }
+                  : current
+              )
+            }
+            rows={5}
+            className="w-full rounded-lg border border-slate-300 px-3 py-3 text-sm outline-none focus:border-slate-900"
+          />
         </div>
       </div>
 
@@ -452,88 +534,64 @@ export default function VendorSettingsPage() {
           </button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead className="bg-slate-100 text-slate-700">
-              <tr>
-                <th className="w-16 px-3 py-2 text-left font-semibold">#</th>
-                <th className="px-3 py-2 text-left font-semibold">Header</th>
-                <th className="px-3 py-2 text-left font-semibold">Field</th>
-                <th className="w-32 px-3 py-2 text-center font-semibold">
-                  Action
-                </th>
+        <table className="w-full text-xs">
+          <thead className="bg-slate-100 text-slate-700">
+            <tr>
+              <th className="w-16 px-3 py-2 text-left font-semibold">#</th>
+              <th className="px-3 py-2 text-left font-semibold">Header</th>
+              <th className="px-3 py-2 text-left font-semibold">Field</th>
+              <th className="w-32 px-3 py-2 text-center font-semibold">
+                Action
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {settings.tableColumns.map((column, index) => (
+              <tr key={index} className="border-t border-slate-100">
+                <td className="px-3 py-2">{index + 1}</td>
+
+                <td className="px-3 py-2">
+                  <input
+                    type="text"
+                    value={column.header}
+                    onChange={(event) =>
+                      updateColumn(index, "header", event.target.value)
+                    }
+                    className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
+                  />
+                </td>
+
+                <td className="px-3 py-2">
+                  <select
+                    value={column.field}
+                    onChange={(event) =>
+                      updateColumn(index, "field", event.target.value)
+                    }
+                    className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
+                  >
+                    {FIELD_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+
+                <td className="px-3 py-2 text-center">
+                  <button
+                    type="button"
+                    onClick={() => removeColumn(index)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </td>
               </tr>
-            </thead>
-
-            <tbody>
-              {settings.tableColumns.map((column, index) => (
-                <tr key={index} className="border-t border-slate-100">
-                  <td className="px-3 py-2 text-slate-700">{index + 1}</td>
-
-                  <td className="px-3 py-2">
-                    <input
-                      type="text"
-                      value={column.header}
-                      onChange={(event) =>
-                        updateColumn(index, "header", event.target.value)
-                      }
-                      className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
-                    />
-                  </td>
-
-                  <td className="px-3 py-2">
-                    <select
-                      value={column.field}
-                      onChange={(event) =>
-                        updateColumn(index, "field", event.target.value)
-                      }
-                      className="h-9 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
-                    >
-                      {FIELD_OPTIONS.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-
-                  <td className="px-3 py-2 text-center">
-                    <button
-                      type="button"
-                      onClick={() => removeColumn(index)}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs font-medium text-slate-700">
-        Available placeholders: {"{{poNumber}}"}, {"{{vendor}}"},{" "}
-        {"{{customer}}"}, {"{{shipDate}}"}, {"{{total}}"}, {"{{contact}}"},{" "}
-        {"{{table}}"}
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>
-  );
-}
-
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <label className="text-xs font-semibold uppercase text-slate-500">
-        {label}
-      </label>
-      <input
-        type="text"
-        value={value || ""}
-        readOnly
-        className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none"
-      />
-    </div>
   );
 }
