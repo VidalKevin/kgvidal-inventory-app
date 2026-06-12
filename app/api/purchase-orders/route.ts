@@ -17,6 +17,24 @@ const PURCHASE_ORDER_COLUMNS = `
   updated_at
 `;
 
+type PurchaseOrderPayloadRow = {
+  date?: string;
+  mfg?: string;
+  vendor?: string;
+  product_title?: string;
+  productTitle?: string;
+  variant_title?: string;
+  variantTitle?: string;
+  sku?: string;
+  qty?: number | string;
+  amountApproved?: number | string;
+  qty_received?: number | string;
+  diff?: number | string;
+  po_number?: string;
+  poNumber?: string;
+  status?: string;
+};
+
 export async function GET() {
   const { data, error } = await supabaseAdmin
     .from("purchase_orders")
@@ -36,8 +54,13 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const rows = Array.isArray(body.items) ? body.items : [body];
+    const body = (await request.json()) as
+      | PurchaseOrderPayloadRow
+      | { items?: PurchaseOrderPayloadRow[] };
+    const rows: PurchaseOrderPayloadRow[] =
+      "items" in body && Array.isArray(body.items)
+        ? body.items
+        : [body as PurchaseOrderPayloadRow];
 
     const payload = rows
       .filter((row) => Number(row.qty ?? row.amountApproved ?? 0) > 0)

@@ -1,0 +1,33 @@
+name: Shopify Scheduled Sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    # GitHub cron is UTC. These cover Friday 7:00-7:45 AM Eastern
+    # during both daylight and standard time. The app schedule decides
+    # whether the Shopify sync is actually due.
+    - cron: "0,15,30,45 11,12 * * 5"
+
+jobs:
+  shopify-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call scheduled sync endpoint
+        env:
+          APP_URL: ${{ secrets.SHOPIFY_SYNC_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ]; then
+            echo "Missing SHOPIFY_SYNC_APP_URL secret."
+            exit 1
+          fi
+
+          endpoint="${APP_URL%/}/api/cron/shopify-sync"
+
+          if [ -n "$CRON_SECRET" ]; then
+            curl --fail --show-error --silent \
+              --header "Authorization: Bearer $CRON_SECRET" \
+              "$endpoint"
+          else
+            curl --fail --show-error --silent "$endpoint"
+          fi

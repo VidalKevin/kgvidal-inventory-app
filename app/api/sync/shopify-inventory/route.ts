@@ -411,7 +411,7 @@ async function insertSnapshotRows(
   };
 }
 
-export async function GET(request: Request) {
+async function runShopifyInventorySync(origin: string) {
   try {
     const env = await getEnvMap();
 
@@ -436,15 +436,17 @@ export async function GET(request: Request) {
     }
 
     if (rows.length === 0) {
-      return NextResponse.json({
+      return {
         success: true,
         inserted: 0,
+        forecastSaved: 0,
+        usedForecastColumns: false,
         snapshotDate,
         message: "No Shopify inventory rows found.",
-      });
+      };
     }
 
-    const shopifySalesBySku = await getSalesBySku(new URL(request.url).origin);
+    const shopifySalesBySku = await getSalesBySku(origin);
     const pdSalesBySku = await fetchPd90DaySalesBySku(
       supabaseAdmin,
       snapshotDate
@@ -492,23 +494,30 @@ export async function GET(request: Request) {
       enrichedRows
     );
 
-    return NextResponse.json({
+    return {
       success: true,
       inserted: rows.length,
       forecastSaved: insertResult.forecastSaved,
       usedForecastColumns: insertResult.usedForecastColumns,
       snapshotDate,
-    });
+    };
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown sync error";
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: message,
-      },
-      { status: 500 }
-    );
+    return {
+      success: false,
+      error: message,
+    };
   }
+}
+
+export async function GET(request: Request) {
+  const result = await runShopifyInventorySync(new URL(request.url).origin);
+
+  if (!result.success) {
+    return NextResponse.json(result, { status: 500 });
+  }
+
+  return NextResponse.json(result);
 }

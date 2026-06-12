@@ -81,6 +81,16 @@ type VendorResponse = {
   error?: string;
 };
 
+type SyncScheduleResponse = {
+  schedule?: {
+    time: string;
+    frequency: SyncFrequency;
+    days: string[];
+    enabled?: boolean;
+  };
+  error?: string;
+};
+
 type ApprovedSaveState = "idle" | "saving" | "saved" | "error";
 
 function escapeHtml(value: string | number) {
@@ -240,6 +250,7 @@ export default function InventoryPage() {
   const [scheduleTime, setScheduleTime] = useState(() => getSavedSyncSchedule().time);
   const [scheduleFrequency, setScheduleFrequency] = useState<SyncFrequency>(() => getSavedSyncSchedule().frequency);
   const [scheduleDays, setScheduleDays] = useState<string[]>(() => getSavedSyncSchedule().days);
+  const [savingSchedule, setSavingSchedule] = useState(false);
   const [inventoryMessage, setInventoryMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [search, setSearch] = useState("");
   const [approvedQtyBySku, setApprovedQtyBySku] = useState<Record<string, number>>({});
@@ -381,6 +392,43 @@ export default function InventoryPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let ignore = false;
+
+    fetch("/api/sync/shopify-schedule")
+      .then(async (response) => {
+        const data = (await response.json()) as SyncScheduleResponse;
+
+        if (!response.ok) {
+          throw new Error(data.error || "Unable to load Shopify sync schedule.");
+        }
+
+        return data.schedule;
+      })
+      .then((schedule) => {
+        if (!ignore && schedule) {
+          setScheduleTime(schedule.time);
+          setScheduleFrequency(schedule.frequency);
+          setScheduleDays(schedule.days);
+          window.localStorage.setItem(
+            "shopify-sync-schedule",
+            JSON.stringify({
+              time: schedule.time,
+              frequency: schedule.frequency,
+              days: schedule.days,
+            })
+          );
+        }
+      })
+      .catch(() => {
+        // Keep the local saved schedule as a fallback until Supabase setup is complete.
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
   const dates = useMemo(() => {
     return availableDates.length
       ? availableDates
@@ -497,7 +545,6 @@ export default function InventoryPage() {
     let ignore = false;
 
     if (!activePoVendor) {
-      setSavedPoNumber("");
       return () => {
         ignore = true;
       };
@@ -756,7 +803,7 @@ export default function InventoryPage() {
     });
   };
 
-  const saveSyncSchedule = () => {
+  const saveSyncSchedule = async () => {
     const days = scheduleFrequency === "daily" ? ["S", "M", "T", "W", "T2", "F", "S2"] : scheduleDays;
 
     window.localStorage.setItem(
@@ -768,11 +815,42 @@ export default function InventoryPage() {
       })
     );
 
-    setSyncModalOpen(false);
-    setInventoryMessage({
-      type: "success",
-      text: "Shopify sync schedule saved. Server cron still needs deployment setup to run automatically.",
-    });
+    setSavingSchedule(true);
+    setInventoryMessage(null);
+
+    try {
+      const response = await fetch("/api/sync/shopify-schedule", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          time: scheduleTime,
+          frequency: scheduleFrequency,
+          days,
+          enabled: true,
+        }),
+      });
+      const data = (await response.json()) as SyncScheduleResponse;
+
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to save Shopify sync schedule.");
+      }
+
+      setSyncModalOpen(false);
+      setInventoryMessage({
+        type: "success",
+        text: "Shopify sync schedule saved to Supabase. The automated caller will run it when the deployed scheduler is configured.",
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to save Shopify sync schedule.";
+      setInventoryMessage({ type: "error", text: message });
+    } finally {
+      setSavingSchedule(false);
+    }
   };
 
   const downloadExcel = () => {
@@ -1132,11 +1210,14 @@ export default function InventoryPage() {
 
                   <button
                     type="button"
-                    onClick={saveSyncSchedule}
-                    disabled={scheduleFrequency !== "daily" && scheduleDays.length === 0}
+                    onClick={() => void saveSyncSchedule()}
+                    disabled={
+                      savingSchedule ||
+                      (scheduleFrequency !== "daily" && scheduleDays.length === 0)
+                    }
                     className="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    Save schedule
+                    {savingSchedule ? "Saving..." : "Save schedule"}
                   </button>
                 </div>
               )}

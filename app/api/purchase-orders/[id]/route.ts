@@ -18,9 +18,9 @@ const PURCHASE_ORDER_COLUMNS = `
 `;
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
 function cleanValue(value: unknown) {
@@ -96,8 +96,9 @@ async function findPurchaseOrder(rawId: string) {
   return { data, error: error?.message || null };
 }
 
-export async function GET(_request: NextRequest, { params }: RouteContext) {
-  const result = await findPurchaseOrder(params.id);
+export async function GET(_request: NextRequest, context: RouteContext) {
+  const { id } = await context.params;
+  const result = await findPurchaseOrder(id);
 
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: 500 });
@@ -107,7 +108,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     return NextResponse.json(
       {
         error: "Purchase order line not found.",
-        lookup: params.id,
+        lookup: id,
       },
       { status: 404 }
     );
@@ -116,9 +117,10 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
   return NextResponse.json({ purchaseOrder: result.data });
 }
 
-export async function PATCH(request: NextRequest, { params }: RouteContext) {
+export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
-    const existing = await findPurchaseOrder(params.id);
+    const { id } = await context.params;
+    const existing = await findPurchaseOrder(id);
 
     if (existing.error) {
       return NextResponse.json({ error: existing.error }, { status: 500 });
@@ -128,7 +130,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json(
         {
           error: "Purchase order line not found.",
-          lookup: params.id,
+          lookup: id,
         },
         { status: 404 }
       );

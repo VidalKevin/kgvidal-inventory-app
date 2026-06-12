@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
 const VENDOR_COLUMNS = `
@@ -25,7 +25,7 @@ const VENDOR_COLUMNS = `
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
-    const id = context.params.id;
+    const { id } = await context.params;
 
     if (!id || id === "undefined") {
       return NextResponse.json(
@@ -58,7 +58,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
-    const id = context.params.id;
+    const { id } = await context.params;
     const body = await request.json();
 
     if (!id || id === "undefined") {
