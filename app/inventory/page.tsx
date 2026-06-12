@@ -569,7 +569,8 @@ export default function InventoryPage() {
       };
     }
 
-    const expectedPoNumber = buildPoNumber(activePoVendor, getTodayDate());
+    const poSnapshotDate = getPurchaseOrderDate(effectiveDate || getTodayDate());
+    const expectedPoNumber = buildPoNumber(activePoVendor, poSnapshotDate);
 
     fetch("/api/purchase-orders")
       .then(async (response) => {
@@ -591,7 +592,7 @@ export default function InventoryPage() {
     return () => {
       ignore = true;
     };
-  }, [activePoVendor]);
+  }, [activePoVendor, effectiveDate]);
 
   const activeVendorDetails = useMemo(() => {
     if (!activePoVendor) {
@@ -628,12 +629,12 @@ export default function InventoryPage() {
   };
 
   const ensurePoNumber = () => {
-    const poCreatedDate = getTodayDate();
-    return buildPoNumber(activePoVendor ?? poRows[0]?.vendor ?? "PO", poCreatedDate);
+    const poSnapshotDate = getPurchaseOrderDate(effectiveDate || poRows[0]?.date || getTodayDate());
+    return buildPoNumber(activePoVendor ?? poRows[0]?.vendor ?? "PO", poSnapshotDate);
   };
 
   const buildPurchaseOrderPayloadRows = (poNumber: string) => {
-    const poCreatedDate = getTodayDate();
+    const poCreatedDate = getPurchaseOrderDate(effectiveDate || poRows[0]?.date || getTodayDate());
 
     return poRows
       .filter((row) => getApprovedQty(row) > 0)
@@ -728,7 +729,7 @@ export default function InventoryPage() {
     y += 6;
     doc.text(`Vendor: ${activePoVendor}`, 14, y);
     y += 6;
-    doc.text(`Date: ${getTodayDate()}`, 14, y);
+    doc.text(`Date: ${getPurchaseOrderDate(effectiveDate || poRows[0]?.date || getTodayDate())}`, 14, y);
     y += 9;
 
     doc.setFontSize(9);
@@ -1284,8 +1285,20 @@ export default function InventoryPage() {
                 className="flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save size={14} />
-                Create PO
+                {savedPoNumber ? "Update PO" : "Create PO"}
               </button>
+              {savedPoNumber && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.location.href = `/purchase-orders?po=${encodeURIComponent(savedPoNumber)}`;
+                  }}
+                  className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  <FileText size={14} />
+                  Open PO
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => generatePurchaseOrderPdf("preview")}
