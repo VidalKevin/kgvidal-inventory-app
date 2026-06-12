@@ -69,6 +69,7 @@ export async function GET(request: Request) {
       `${new URL(request.url).origin}/api/sync/shopify-inventory`,
       { cache: "no-store" }
     );
+
     const syncResult = (await syncResponse.json()) as SyncResult;
 
     if (!syncResponse.ok || !syncResult.success) {

@@ -24,10 +24,10 @@ export type ScheduleCheck = {
 const SCHEDULE_NAME = "shopify-inventory";
 const DAY_CODES = ["S", "M", "T", "W", "T2", "F", "S2"];
 const DEFAULT_TIMEZONE = "America/New_York";
-const SCHEDULE_GRACE_MINUTES = 15;
+const SCHEDULE_GRACE_MINUTES = 60;
 
 export const defaultShopifySyncSchedule: ShopifySyncSchedule = {
-  time: "06:30",
+  time: "08:00",
   frequency: "weekly",
   days: ["F"],
   timezone: DEFAULT_TIMEZONE,
@@ -90,6 +90,7 @@ function getLocalParts(date: Date, timezone: string) {
 
   const part = (type: string) =>
     parts.find((item) => item.type === type)?.value ?? "";
+
   const weekdayIndex: Record<string, number> = {
     Sun: 0,
     Mon: 1,
@@ -99,6 +100,7 @@ function getLocalParts(date: Date, timezone: string) {
     Fri: 5,
     Sat: 6,
   };
+
   const dayCode = DAY_CODES[weekdayIndex[part("weekday")] ?? 0];
   const localDate = `${part("year")}-${part("month")}-${part("day")}`;
   const localTime = `${part("hour")}:${part("minute")}`;
@@ -113,6 +115,11 @@ function getLocalParts(date: Date, timezone: string) {
 
 function timeToMinutes(value: string) {
   const [hours, minutes] = value.split(":").map(Number);
+
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return null;
+  }
+
   return hours * 60 + minutes;
 }
 
@@ -122,11 +129,19 @@ export function checkShopifySyncSchedule(
 ): ScheduleCheck {
   const parts = getLocalParts(now, schedule.timezone);
   const runKey = `${parts.localDate}T${schedule.time}`;
+
   const currentMinutes = timeToMinutes(parts.localTime);
   const scheduleMinutes = timeToMinutes(schedule.time);
+
+  const minutesAfterScheduled =
+    currentMinutes === null || scheduleMinutes === null
+      ? null
+      : currentMinutes - scheduleMinutes;
+
   const isWithinScheduleWindow =
-    currentMinutes >= scheduleMinutes &&
-    currentMinutes <= scheduleMinutes + SCHEDULE_GRACE_MINUTES;
+    minutesAfterScheduled !== null &&
+    minutesAfterScheduled >= 0 &&
+    minutesAfterScheduled < SCHEDULE_GRACE_MINUTES;
 
   if (!schedule.enabled) {
     return { ...parts, runKey, due: false, reason: "Schedule is disabled." };
@@ -136,21 +151,21 @@ export function checkShopifySyncSchedule(
     return { ...parts, runKey, due: false, reason: "Today is not selected." };
   }
 
-  if (!isWithinScheduleWindow) {
-    return {
-      ...parts,
-      runKey,
-      due: false,
-      reason: "Current time is outside the schedule window.",
-    };
-  }
-
   if (schedule.last_run_key === runKey) {
     return {
       ...parts,
       runKey,
       due: false,
       reason: "Schedule already ran for this time.",
+    };
+  }
+
+  if (!isWithinScheduleWindow) {
+    return {
+      ...parts,
+      runKey,
+      due: false,
+      reason: "Current time is outside the schedule window.",
     };
   }
 
@@ -179,6 +194,7 @@ export async function saveShopifySyncSchedule(
   schedule: Partial<ShopifySyncSchedule>
 ) {
   const normalized = normalizeShopifySyncSchedule(schedule);
+
   const { error } = await supabaseAdmin.from("app_sync_schedules").upsert(
     {
       name: SCHEDULE_NAME,
