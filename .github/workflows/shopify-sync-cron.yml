@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
   schedule:
     # Lightweight schedule check. The app only runs Shopify sync when
-    # the saved Supabase schedule is due.
-    - cron: "*/30 * * * 5,6"
+    # the saved Supabase schedule is due. Run on Fri/Sat/Sun UTC so
+    # Eastern-time Friday/Saturday schedules are covered after UTC rollover.
+    - cron: "*/15 * * * 5,6,0"
 
 jobs:
   shopify-sync:
@@ -24,11 +25,12 @@ jobs:
           fi
 
           endpoint="${APP_URL%/}/api/cron/shopify-sync"
+          echo "Calling $endpoint at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
           if [ -n "$CRON_SECRET" ]; then
-            curl --fail --show-error --silent \
+            curl --fail-with-body --show-error --silent \
               --header "Authorization: Bearer $CRON_SECRET" \
               "$endpoint"
           else
-            curl --fail --show-error --silent "$endpoint"
+            curl --fail-with-body --show-error --silent "$endpoint"
           fi
