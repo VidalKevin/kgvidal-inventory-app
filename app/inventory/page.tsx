@@ -19,6 +19,14 @@ import {
   X,
 } from "lucide-react";
 import jsPDF from "jspdf";
+import {
+  buildPdfOrderPreview,
+  normalizeVendorPdfSettings,
+  vendorUsesPdfFormat,
+  type PdfFormField,
+  type PdfSkuMapping,
+  type VendorPdfSettings,
+} from "@/lib/vendorOrderPdf";
 
 type InventoryStatus = "Healthy" | "Low Stocks" | "Critical";
 
@@ -106,25 +114,7 @@ type VendorTableColumn = {
   field: string;
 };
 
-type PdfSkuMapping = {
-  sku: string;
-  itemSku: string;
-  itemName: string;
-};
-
-type PdfFormField = {
-  key?: string;
-  label: string;
-  value: string;
-};
-
-type VendorSettings = {
-  emailSubject?: string;
-  emailBody?: string;
-  pdfEmailBody?: string;
-  pdfEnabled?: boolean;
-  pdfFormFields?: PdfFormField[];
-  pdfSkuMappings?: PdfSkuMapping[];
+type VendorSettings = VendorPdfSettings & {
   tableColumns?: VendorTableColumn[];
 };
 
@@ -370,6 +360,7 @@ export default function InventoryPage() {
   const [activePoVendor, setActivePoVendor] = useState<string | null>(null);
   const [savedPoNumber, setSavedPoNumber] = useState("");
   const [emailPreviewOpen, setEmailPreviewOpen] = useState(false);
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [columnFilters, setColumnFilters] = useState<Record<ColumnFilterKey, string>>({
     productTitle: "All",
@@ -738,11 +729,25 @@ export default function InventoryPage() {
       return null;
     }
 
-    return (
-      vendors.find((vendor) => vendorMatchesActiveName(vendor, activePoVendor)) ??
-      null
-    );
+    const vendor =
+      vendors.find((entry) => vendorMatchesActiveName(entry, activePoVendor)) ??
+      null;
+
+    if (!vendor) {
+      return null;
+    }
+
+    return {
+      ...vendor,
+      settings: normalizeVendorPdfSettings(
+        vendor.settings,
+        vendor.mfg,
+        vendor.code
+      ),
+    };
   }, [activePoVendor, vendors]);
+
+  const activeVendorUsesPdf = vendorUsesPdfFormat(activeVendorDetails?.settings);
 
   const openOrderDestination = () => {
     if (!activeVendorDetails) {
@@ -847,53 +852,99 @@ export default function InventoryPage() {
     }
   };
 
-  const generatePurchaseOrderPdf = (mode: "preview" | "download") => {
+  const pdfOrderPreview = useMemo(() => {
     if (!activePoVendor || poRows.length === 0) {
+      return null;
+    }
+
+    const poDate = getPurchaseOrderDate(effectiveDate || poRows[0]?.date);
+    const poNumber = savedPoNumber || buildPoNumber(activePoVendor, poDate);
+
+    return buildPdfOrderPreview({
+      poNumber,
+      vendorName: activePoVendor,
+      vendorCode: activeVendorDetails?.code,
+      settings: activeVendorDetails?.settings,
+      rows: poRows.map((row) => ({
+        sku: row.sku,
+        productTitle: row.productTitle,
+        variantTitle: row.variantTitle,
+        qty: getApprovedQty(row),
+      })),
+    });
+  }, [
+    activePoVendor,
+    activeVendorDetails,
+    effectiveDate,
+    getApprovedQty,
+    poRows,
+    savedPoNumber,
+  ]);
+
+  const generatePurchaseOrderPdf = (mode: "preview" | "download") => {
+    if (!pdfOrderPreview) {
       setInventoryMessage({
         type: "error",
-        text: "No approved quantities are available for this vendor.",
+        text: "No PDF order data is available for this vendor.",
       });
       return;
     }
 
-    const poNumber = ensurePoNumber();
     const doc = new jsPDF();
     let y = 18;
 
     doc.setFontSize(16);
     doc.text("Purchase Order", 14, y);
-    y += 9;
+    y += 8;
     doc.setFontSize(10);
-    doc.text(`PO Number: ${poNumber}`, 14, y);
+    doc.text(`PO Number: ${pdfOrderPreview.poNumber}`, 14, y);
     y += 6;
-    doc.text(`Vendor: ${activePoVendor}`, 14, y);
-    y += 6;
-    doc.text(`Date: ${getPurchaseOrderDate(effectiveDate || poRows[0]?.date || getTodayDate())}`, 14, y);
-    y += 9;
+    doc.text(`Vendor: ${pdfOrderPreview.vendorName}`, 14, y);
+    y += 10;
 
+    pdfOrderPreview.formFields.forEach((field) => {
+      if (y > 265) {
+        doc.addPage();
+        y = 18;
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.text(`${field.label}:`, 14, y);
+      doc.setFont("helvetica", "normal");
+
+      const valueLines = doc.splitTextToSize(field.value || "-", 118);
+      doc.text(valueLines, 62, y);
+      y += Math.max(6, valueLines.length * 5) + 3;
+    });
+
+    y += 4;
+
+    if (y > 250) {
+      doc.addPage();
+      y = 18;
+    }
+
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
-    doc.text("SKU", 14, y);
-    doc.text("Item", 48, y);
-    doc.text("Approved", 178, y, { align: "right" });
+    doc.text("Item SKU # / Private label SKU #", 14, y);
+    doc.text("Item Name (Flavor):", 62, y);
+    doc.text("Item Quantity:", 178, y, { align: "right" });
     y += 4;
     doc.line(14, y, 195, y);
     y += 6;
+    doc.setFont("helvetica", "normal");
 
-    poRows.forEach((row) => {
-      const itemName =
-        row.variantTitle && row.variantTitle !== "Default Title"
-          ? `${row.productTitle} - ${row.variantTitle}`
-          : row.productTitle;
-      const itemLines = doc.splitTextToSize(itemName, 110);
+    pdfOrderPreview.rows.forEach((row) => {
+      const itemLines = doc.splitTextToSize(row.itemName, 88);
 
       if (y > 270) {
         doc.addPage();
         y = 18;
       }
 
-      doc.text(row.sku || "-", 14, y);
-      doc.text(itemLines, 48, y);
-      doc.text(String(getApprovedQty(row)), 178, y, { align: "right" });
+      doc.text(row.itemSku || "-", 14, y);
+      doc.text(itemLines, 62, y);
+      doc.text(String(row.qty), 178, y, { align: "right" });
       y += Math.max(6, itemLines.length * 5);
     });
 
@@ -908,7 +959,7 @@ export default function InventoryPage() {
       return;
     }
 
-    doc.save(`${poNumber}.pdf`);
+    doc.save(`${pdfOrderPreview.poNumber}.pdf`);
   };
 
   const getEmailFieldValue = useCallback((row: InventoryRow, field: string) => {
@@ -953,7 +1004,7 @@ export default function InventoryPage() {
     const vendorCode = activeVendorDetails?.code || vendorName;
     const poNumber = savedPoNumber || buildPoNumber(vendorName, poDate);
     const settings = activeVendorDetails?.settings ?? null;
-    const usesPdfFormat = Boolean(settings?.pdfEnabled);
+    const usesPdfFormat = vendorUsesPdfFormat(settings);
     const tableColumns =
       settings?.tableColumns && settings.tableColumns.length > 0
         ? settings.tableColumns
@@ -1018,21 +1069,24 @@ export default function InventoryPage() {
       usesPdfFormat && Array.isArray(settings?.pdfFormFields)
         ? settings.pdfFormFields.filter((field) => field.label.trim())
         : [];
-    const pdfRows = poRows.map((row) => {
-      const mappedItem = mappingBySku.get(normalizeVendorMatchKey(row.sku));
-      const itemName =
-        mappedItem?.itemName ||
-        (row.variantTitle && row.variantTitle !== "Default Title"
-          ? `${row.productTitle} - ${row.variantTitle}`
-          : row.productTitle);
+    const pdfRows =
+      pdfOrderPreview?.rows ??
+      poRows.map((row) => {
+        const mappedItem = mappingBySku.get(normalizeVendorMatchKey(row.sku));
+        const itemName =
+          mappedItem?.itemName ||
+          (row.variantTitle && row.variantTitle !== "Default Title"
+            ? `${row.productTitle} - ${row.variantTitle}`
+            : row.productTitle);
 
-      return {
-        itemSku: mappedItem?.itemSku || row.sku || "-",
-        itemName,
-        qty: getApprovedQty(row),
-      };
-    });
-    const pdfFieldsText = pdfFormFields
+        return {
+          itemSku: mappedItem?.itemSku || row.sku || "-",
+          itemName,
+          qty: getApprovedQty(row),
+        };
+      });
+    const resolvedPdfFormFields = pdfOrderPreview?.formFields ?? pdfFormFields;
+    const pdfFieldsText = resolvedPdfFormFields
       .map((field) => `${field.label}: ${field.value || "-"}`)
       .join("\n");
     const pdfRowsText = [
@@ -1040,15 +1094,16 @@ export default function InventoryPage() {
       ...pdfRows.map((row) => `${row.itemSku}\t${row.itemName}\t${row.qty}`),
     ].join("\n");
     const pdfTableText = [pdfFieldsText, pdfRowsText].filter(Boolean).join("\n\n");
-    const pdfFieldsHtml = pdfFormFields.length
-      ? `<table style="border-collapse:collapse;margin-bottom:12px;width:100%;max-width:680px;"><tbody>${pdfFormFields
-          .map(
-            (field) =>
-              `<tr><td style="border:1px solid #1f2937;padding:5px 7px;font-weight:700;width:32%;">${escapeHtml(field.label)}</td><td style="border:1px solid #1f2937;padding:5px 7px;white-space:pre-line;">${escapeHtml(field.value || "-")}</td></tr>`
-          )
-          .join("")}</tbody></table>`
-      : "";
-    const pdfRowsHtml = `
+    const pdfFieldsHtml = pdfOrderPreview?.fieldsHtml ||
+      (resolvedPdfFormFields.length
+        ? `<table style="border-collapse:collapse;margin-bottom:12px;width:100%;max-width:680px;"><tbody>${resolvedPdfFormFields
+            .map(
+              (field) =>
+                `<tr><td style="border:1px solid #1f2937;padding:5px 7px;font-weight:700;width:32%;">${escapeHtml(field.label)}</td><td style="border:1px solid #1f2937;padding:5px 7px;white-space:pre-line;">${escapeHtml(field.value || "-")}</td></tr>`
+            )
+            .join("")}</tbody></table>`
+        : "");
+    const pdfRowsHtml = pdfOrderPreview?.rowsHtml || `
       <table style="border-collapse:collapse;width:100%;max-width:680px;">
         <thead>
           <tr>
@@ -1117,6 +1172,7 @@ export default function InventoryPage() {
     effectiveDate,
     getApprovedQty,
     getEmailFieldValue,
+    pdfOrderPreview,
     poRows,
     savedPoNumber,
   ]);
@@ -1471,7 +1527,6 @@ export default function InventoryPage() {
       : []),
     { label: "Update", key: "status", width: "w-[105px]" },
   ];
-  const activeVendorUsesPdf = Boolean(activeVendorDetails?.settings?.pdfEnabled);
 
   return (
       <div className="space-y-4" onClick={() => {
@@ -1692,6 +1747,7 @@ export default function InventoryPage() {
                   setActivePoVendor(null);
                   setSavedPoNumber("");
                   setEmailPreviewOpen(false);
+                  setPdfPreviewOpen(false);
                 }}
                 className="mb-2 inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
               >
@@ -1720,8 +1776,8 @@ export default function InventoryPage() {
                 <>
                 <button
                   type="button"
-                  onClick={() => generatePurchaseOrderPdf("preview")}
-                  disabled={poRows.length === 0}
+                  onClick={() => setPdfPreviewOpen(true)}
+                  disabled={poRows.length === 0 || !pdfOrderPreview}
                   className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <FileText size={14} />
@@ -1730,7 +1786,7 @@ export default function InventoryPage() {
                 <button
                   type="button"
                   onClick={() => generatePurchaseOrderPdf("download")}
-                  disabled={poRows.length === 0}
+                  disabled={poRows.length === 0 || !pdfOrderPreview}
                   className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Download size={14} />
@@ -1772,11 +1828,15 @@ export default function InventoryPage() {
               >
                 {activeVendorDetails?.order_at.toLowerCase().includes("website") ? (
                   <Globe size={14} />
+                ) : activeVendorUsesPdf ? (
+                  <FileText size={14} />
                 ) : (
                   <Mail size={14} />
                 )}
                 <span className="truncate">
-                  {activeVendorDetails?.order_at || "No details"}
+                  {activeVendorUsesPdf
+                    ? "PDF order"
+                    : activeVendorDetails?.order_at || "No details"}
                 </span>
               </button>
             </div>
@@ -1990,6 +2050,52 @@ export default function InventoryPage() {
           </table>
         </div>
       </div>
+      )}
+
+      {pdfPreviewOpen && activePoVendor && pdfOrderPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-3xl rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">
+                  PDF Preview
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Header details from PDF Config Fields and mapped line items.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPdfPreviewOpen(false)}
+                className="rounded-lg p-2 hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="max-h-[70vh] overflow-auto p-5 text-sm">
+              <div
+                className="rounded-lg border border-slate-200 bg-white px-4 py-4 text-slate-900"
+                dangerouslySetInnerHTML={{ __html: pdfOrderPreview.fullHtml }}
+              />
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setPdfPreviewOpen(false)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => generatePurchaseOrderPdf("download")}
+                className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+              >
+                Download PDF
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {emailPreviewOpen && activePoVendor && (
