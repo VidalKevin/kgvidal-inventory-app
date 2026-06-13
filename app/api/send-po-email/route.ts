@@ -11,6 +11,11 @@ type SendPoEmailPayload = {
   text?: string;
   poNumber?: string;
   vendor?: string;
+  attachments?: Array<{
+    filename: string;
+    contentType: string;
+    contentBase64: string;
+  }>;
 };
 
 const oauth2Client = new OAuth2(
@@ -64,6 +69,14 @@ export async function POST(req: Request) {
     );
     const html = String(body.html || "").trim();
     const text = String(body.text || "").trim();
+    const attachments = Array.isArray(body.attachments)
+      ? body.attachments.filter(
+          (attachment) =>
+            attachment.filename &&
+            attachment.contentType &&
+            attachment.contentBase64
+        )
+      : [];
 
     if (!to) {
       return NextResponse.json(
@@ -91,15 +104,44 @@ export async function POST(req: Request) {
       auth: oauth2Client,
     });
 
-    const messageParts = [
-      `From: ${from}`,
-      `To: ${to}`,
-      `Subject: ${subject}`,
-      "MIME-Version: 1.0",
-      "Content-Type: text/html; charset=UTF-8",
-      "",
-      html || text.replace(/\n/g, "<br/>"),
-    ];
+    const htmlBody = html || text.replace(/\n/g, "<br/>");
+    const messageParts = [`From: ${from}`, `To: ${to}`, `Subject: ${subject}`];
+
+    if (attachments.length > 0) {
+      const boundary = `po_boundary_${Date.now()}`;
+
+      messageParts.push(
+        "MIME-Version: 1.0",
+        `Content-Type: multipart/mixed; boundary="${boundary}"`,
+        "",
+        `--${boundary}`,
+        "Content-Type: text/html; charset=UTF-8",
+        "Content-Transfer-Encoding: 7bit",
+        "",
+        htmlBody
+      );
+
+      attachments.forEach((attachment) => {
+        messageParts.push(
+          "",
+          `--${boundary}`,
+          `Content-Type: ${attachment.contentType}; name="${cleanHeader(attachment.filename)}"`,
+          "Content-Transfer-Encoding: base64",
+          `Content-Disposition: attachment; filename="${cleanHeader(attachment.filename)}"`,
+          "",
+          attachment.contentBase64.replace(/(.{76})/g, "$1\n")
+        );
+      });
+
+      messageParts.push("", `--${boundary}--`);
+    } else {
+      messageParts.push(
+        "MIME-Version: 1.0",
+        "Content-Type: text/html; charset=UTF-8",
+        "",
+        htmlBody
+      );
+    }
 
     const response = await gmail.users.messages.send({
       userId: "me",

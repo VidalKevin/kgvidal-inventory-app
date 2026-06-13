@@ -136,6 +136,8 @@ type EmailPreview = {
   subject: string;
   bodyText: string;
   bodyHtml: string;
+  usesPdfFormat: boolean;
+  attachmentName?: string;
 };
 
 type SyncScheduleResponse = {
@@ -779,41 +781,75 @@ export default function InventoryPage() {
     }
   };
 
-  const generatePurchaseOrderPdf = (mode: "preview" | "download") => {
-    if (!activePoVendor || poRows.length === 0) {
-      setInventoryMessage({
-        type: "error",
-        text: "No approved quantities are available for this vendor.",
-      });
-      return;
-    }
-
-    const poNumber = ensurePoNumber();
-    const doc = new jsPDF();
+  const pdfOrderDetails = useMemo(() => {
     const settings = activeVendorDetails?.settings;
-    const pdfMappings =
-      settings?.pdfEnabled && Array.isArray(settings.pdfSkuMappings)
-        ? settings.pdfSkuMappings
-        : [];
     const poDateValue = effectiveDate || poRows[0]?.date || getTodayDate();
     const poDate = getPurchaseOrderDate(poDateValue);
     const displayDate = getPdfDisplayDate(poDateValue);
-    const pdfFormFields =
-      settings?.pdfEnabled && Array.isArray(settings.pdfFormFields)
-        ? settings.pdfFormFields
-            .filter((field) => field.label.trim())
-            .map((field) =>
-              field.key === "orderDate" && !field.value.trim()
-                ? { ...field, value: displayDate }
-                : field
-            )
+    const vendorName = activePoVendor ?? poRows[0]?.vendor ?? "Vendor";
+    const usesVendorPdfConfiguration = Boolean(settings?.pdfEnabled);
+    const pdfMappings =
+      usesVendorPdfConfiguration && Array.isArray(settings?.pdfSkuMappings)
+        ? settings.pdfSkuMappings
         : [];
     const mappingBySku = new Map(
       pdfMappings
         .filter((mapping) => mapping.sku)
         .map((mapping) => [normalizeText(mapping.sku), mapping])
     );
-    const usesVendorPdfConfiguration = Boolean(settings?.pdfEnabled);
+    const formFields =
+      usesVendorPdfConfiguration && Array.isArray(settings?.pdfFormFields)
+        ? settings.pdfFormFields
+            .filter((field) => field.label.trim())
+            .map((field) => ({
+              ...field,
+              value:
+                field.key === "orderDate" && !field.value.trim()
+                  ? displayDate
+                  : field.value,
+            }))
+        : [];
+    const rows = poRows.map((row) => {
+      const mappedItem = mappingBySku.get(normalizeText(row.sku));
+      const itemName =
+        usesVendorPdfConfiguration && mappedItem?.itemName
+          ? mappedItem.itemName
+          : row.variantTitle && row.variantTitle !== "Default Title"
+            ? `${row.productTitle} - ${row.variantTitle}`
+            : row.productTitle;
+      const itemSku =
+        usesVendorPdfConfiguration && mappedItem?.itemSku
+          ? mappedItem.itemSku
+          : row.sku || "-";
+
+      return {
+        itemSku,
+        itemName,
+        qty: getApprovedQty(row),
+      };
+    });
+
+    return {
+      displayDate,
+      formFields,
+      poDate,
+      rows,
+      usesVendorPdfConfiguration,
+      vendorName,
+    };
+  }, [
+    activePoVendor,
+    activeVendorDetails,
+    effectiveDate,
+    getApprovedQty,
+    poRows,
+  ]);
+
+  const buildPurchaseOrderPdfDocument = () => {
+    const poNumber = ensurePoNumber();
+    const doc = new jsPDF();
+    const { formFields, poDate, rows, usesVendorPdfConfiguration } =
+      pdfOrderDetails;
     let y = 18;
 
     doc.setFontSize(16);
@@ -825,15 +861,15 @@ export default function InventoryPage() {
     y += 9;
     doc.setFontSize(10);
 
-    if (usesVendorPdfConfiguration && pdfFormFields.length > 0) {
+    if (usesVendorPdfConfiguration && formFields.length > 0) {
       const leftX = 14;
       const rightX = 108;
       const labelWidth = 31;
       const valueWidth = 48;
 
-      pdfFormFields.forEach((field, index) => {
+      formFields.forEach((field, index) => {
         const x = index % 2 === 0 ? leftX : rightX;
-        const value = field.value.trim() || (field.key === "orderDate" ? displayDate : "");
+        const value = field.value.trim();
         const valueLines = doc.splitTextToSize(value || "-", valueWidth);
 
         doc.setFont("helvetica", "bold");
@@ -846,7 +882,7 @@ export default function InventoryPage() {
         }
       });
 
-      if (pdfFormFields.length % 2 === 1) {
+      if (formFields.length % 2 === 1) {
         y += 7;
       }
 
@@ -874,20 +910,9 @@ export default function InventoryPage() {
     doc.line(14, y, 195, y);
     y += 6;
 
-    poRows.forEach((row) => {
-      const mappedItem = mappingBySku.get(normalizeText(row.sku));
-      const itemName =
-        usesVendorPdfConfiguration && mappedItem?.itemName
-          ? mappedItem.itemName
-          : row.variantTitle && row.variantTitle !== "Default Title"
-          ? `${row.productTitle} - ${row.variantTitle}`
-          : row.productTitle;
-      const itemSku =
-        usesVendorPdfConfiguration && mappedItem?.itemSku
-          ? mappedItem.itemSku
-          : row.sku || "-";
+    rows.forEach((row) => {
       const itemLines = doc.splitTextToSize(
-        itemName,
+        row.itemName,
         usesVendorPdfConfiguration ? 88 : 110
       );
 
@@ -896,9 +921,9 @@ export default function InventoryPage() {
         y = 18;
       }
 
-      doc.text(itemSku, 14, y);
+      doc.text(row.itemSku, 14, y);
       doc.text(itemLines, usesVendorPdfConfiguration ? 78 : 48, y);
-      doc.text(String(getApprovedQty(row)), 178, y, { align: "right" });
+      doc.text(String(row.qty), 178, y, { align: "right" });
       y += Math.max(6, itemLines.length * 5);
     });
 
@@ -907,6 +932,20 @@ export default function InventoryPage() {
     y += 7;
     doc.setFontSize(11);
     doc.text(`Total approved qty: ${poApprovedTotal}`, 14, y);
+
+    return { doc, poNumber };
+  };
+
+  const generatePurchaseOrderPdf = (mode: "preview" | "download") => {
+    if (!activePoVendor || poRows.length === 0) {
+      setInventoryMessage({
+        type: "error",
+        text: "No approved quantities are available for this vendor.",
+      });
+      return;
+    }
+
+    const { doc, poNumber } = buildPurchaseOrderPdfDocument();
 
     if (mode === "preview") {
       window.open(doc.output("bloburl"), "_blank");
@@ -963,6 +1002,7 @@ export default function InventoryPage() {
     const vendorCode = activeVendorDetails?.code || vendorName;
     const poNumber = savedPoNumber || buildPoNumber(vendorName, poDate);
     const settings = activeVendorDetails?.settings ?? null;
+    const usesPdfFormat = Boolean(settings?.pdfEnabled);
     const tableColumns =
       settings?.tableColumns && settings.tableColumns.length > 0
         ? settings.tableColumns
@@ -970,8 +1010,11 @@ export default function InventoryPage() {
     const subjectTemplate =
       settings?.emailSubject?.trim() || `${vendorCode} x ${dateCode}`;
     const bodyTemplate =
-      settings?.emailBody?.trim() ||
-      `Hi {{contact}},\n\nKindly see our order this week.\n\n{{table}}\n\nThanks`;
+      usesPdfFormat
+        ? settings?.pdfEmailBody?.trim() ||
+          `Hi {{contact}},\n\nKindly see attached for our order this week.\n\n{{table}}\n\nThanks`
+        : settings?.emailBody?.trim() ||
+          `Hi {{contact}},\n\nKindly see our order this week.\n\n{{table}}\n\nThanks`;
     const tableRows = poRows.map((row) =>
       tableColumns.map((column) => String(getEmailFieldValue(row, column.field)))
     );
@@ -1013,12 +1056,54 @@ export default function InventoryPage() {
         </tbody>
       </table>
     `;
+    const pdfFieldsText = pdfOrderDetails.formFields
+      .map((field) => `${field.label}: ${field.value || "-"}`)
+      .join("\n");
+    const pdfRowsText = [
+      "Item SKU # / Private label SKU #\tItem Name (Flavor):\tItem Quantity:",
+      ...pdfOrderDetails.rows.map(
+        (row) => `${row.itemSku}\t${row.itemName}\t${row.qty}`
+      ),
+    ].join("\n");
+    const pdfTableText = [pdfFieldsText, pdfRowsText].filter(Boolean).join("\n\n");
+    const pdfFieldsHtml = pdfOrderDetails.formFields.length
+      ? `<table style="border-collapse:collapse;margin-bottom:12px;width:100%;max-width:680px;">
+          <tbody>
+            ${pdfOrderDetails.formFields
+              .map(
+                (field) =>
+                  `<tr><td style="border:1px solid #1f2937;padding:5px 7px;font-weight:700;width:32%;">${escapeHtml(field.label)}</td><td style="border:1px solid #1f2937;padding:5px 7px;white-space:pre-line;">${escapeHtml(field.value || "-")}</td></tr>`
+              )
+              .join("")}
+          </tbody>
+        </table>`
+      : "";
+    const pdfRowsHtml = `
+      <table style="border-collapse:collapse;width:100%;max-width:680px;">
+        <thead>
+          <tr>
+            <th style="border:1px solid #1f2937;background:#1f5f8b;color:#ffffff;padding:4px 7px;text-align:left;">Item SKU # / Private label SKU #</th>
+            <th style="border:1px solid #1f2937;background:#1f5f8b;color:#ffffff;padding:4px 7px;text-align:left;">Item Name (Flavor):</th>
+            <th style="border:1px solid #1f2937;background:#1f5f8b;color:#ffffff;padding:4px 7px;text-align:right;">Item Quantity:</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${pdfOrderDetails.rows
+            .map(
+              (row) =>
+                `<tr><td style="border:1px solid #1f2937;padding:4px 7px;">${escapeHtml(row.itemSku)}</td><td style="border:1px solid #1f2937;padding:4px 7px;">${escapeHtml(row.itemName)}</td><td style="border:1px solid #1f2937;padding:4px 7px;text-align:right;">${escapeHtml(row.qty)}</td></tr>`
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `;
+    const pdfTableHtml = `${pdfFieldsHtml}${pdfRowsHtml}`;
     const replacements: Record<string, string> = {
       contact:
         getFirstName(
           activeVendorDetails?.contact || activeVendorDetails?.mfg || vendorName
         ) || vendorName,
-      table: tableText,
+      table: usesPdfFormat ? pdfTableText : tableText,
       poNumber,
       vendor: vendorName,
       code: vendorCode,
@@ -1028,21 +1113,30 @@ export default function InventoryPage() {
     const htmlReplacements = Object.fromEntries(
       Object.entries(replacements).map(([key, value]) => [key, escapeHtml(value)])
     ) as Record<string, string>;
-    htmlReplacements.table = tableHtml;
+    htmlReplacements.table = usesPdfFormat ? pdfTableHtml : tableHtml;
     const rawHtmlTemplate = bodyTemplate
       .split("\n\n")
       .map((block) => `<p>${escapeHtml(block).replace(/\n/g, "<br/>")}</p>`)
       .join("");
     const htmlTemplate = rawHtmlTemplate.replace(
       `<p>${escapeHtml("{{table}}")}</p>`,
-      tableHtml
+      usesPdfFormat ? pdfTableHtml : tableHtml
     );
     const replacePlaceholders = (template: string, values: Record<string, string>) =>
       template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => {
         return values[key] ?? values[key.charAt(0).toLowerCase() + key.slice(1)] ?? "";
       });
-    const bodyText = replacePlaceholders(bodyTemplate, replacements);
-    const bodyHtml = replacePlaceholders(htmlTemplate, htmlReplacements);
+    const bodyTextBase = replacePlaceholders(bodyTemplate, replacements);
+    const bodyHtmlBase = replacePlaceholders(htmlTemplate, htmlReplacements);
+    const hasTablePlaceholder = /\{\{\s*table\s*\}\}/i.test(bodyTemplate);
+    const bodyText =
+      usesPdfFormat && !hasTablePlaceholder
+        ? `${bodyTextBase}\n\n${pdfTableText}`
+        : bodyTextBase;
+    const bodyHtml =
+      usesPdfFormat && !hasTablePlaceholder
+        ? `${bodyHtmlBase}${pdfTableHtml}`
+        : bodyHtmlBase;
 
     return {
       from: DEFAULT_EMAIL_FROM,
@@ -1050,12 +1144,15 @@ export default function InventoryPage() {
       subject: replacePlaceholders(subjectTemplate, replacements),
       bodyText,
       bodyHtml,
+      usesPdfFormat,
+      attachmentName: usesPdfFormat ? `${poNumber}.pdf` : undefined,
     };
   }, [
     activePoVendor,
     activeVendorDetails,
     effectiveDate,
     getEmailFieldValue,
+    pdfOrderDetails,
     poRows,
     savedPoNumber,
   ]);
@@ -1078,6 +1175,18 @@ export default function InventoryPage() {
         return;
       }
 
+      const attachments = emailPreview.usesPdfFormat
+        ? [
+            {
+              filename: `${poNumber}.pdf`,
+              contentType: "application/pdf",
+              contentBase64: buildPurchaseOrderPdfDocument()
+                .doc.output("datauristring")
+                .split(",")[1],
+            },
+          ]
+        : [];
+
       const response = await fetch("/api/send-po-email", {
         method: "POST",
         headers: {
@@ -1091,6 +1200,7 @@ export default function InventoryPage() {
           text: emailPreview.bodyText,
           poNumber,
           vendor: activePoVendor,
+          attachments,
         }),
       });
       const data = await response.json();
@@ -1923,6 +2033,16 @@ export default function InventoryPage() {
                   {emailPreview.subject}
                 </p>
               </div>
+              {emailPreview.usesPdfFormat && (
+                <div>
+                  <p className="text-xs font-semibold uppercase text-slate-500">
+                    Attachment
+                  </p>
+                  <p className="mt-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    {emailPreview.attachmentName}
+                  </p>
+                </div>
+              )}
               <div>
                 <p className="text-xs font-semibold uppercase text-slate-500">
                   Body
