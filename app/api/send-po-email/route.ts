@@ -3,6 +3,16 @@ import { NextResponse } from "next/server";
 
 const OAuth2 = google.auth.OAuth2;
 
+type SendPoEmailPayload = {
+  from?: string;
+  to?: string;
+  subject?: string;
+  html?: string;
+  text?: string;
+  poNumber?: string;
+  vendor?: string;
+};
+
 const oauth2Client = new OAuth2(
   process.env.GMAIL_CLIENT_ID,
   process.env.GMAIL_CLIENT_SECRET
@@ -12,103 +22,106 @@ oauth2Client.setCredentials({
   refresh_token: process.env.GMAIL_REFRESH_TOKEN,
 });
 
+function cleanHeader(value: unknown) {
+  return String(value || "")
+    .replace(/[\r\n]+/g, " ")
+    .trim();
+}
+
+function encodeBase64Url(value: string) {
+  return Buffer.from(value, "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    if (
+      !process.env.GMAIL_CLIENT_ID ||
+      !process.env.GMAIL_CLIENT_SECRET ||
+      !process.env.GMAIL_REFRESH_TOKEN
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Gmail sending is not configured. Add GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN.",
+        },
+        { status: 500 }
+      );
+    }
 
-    const {
-      poNumber,
-      vendor,
-      customer,
-      shipDate,
-      total,
-      rows,
-    } = body;
+    const body = (await req.json()) as SendPoEmailPayload;
+    const fromEmail =
+      process.env.GMAIL_FROM_EMAIL || "kevingalang@vidalcoaching.com";
+    const fromName = process.env.GMAIL_FROM_NAME || "Kevin Galang";
+    const from = cleanHeader(body.from || `${fromName} <${fromEmail}>`);
+    const to = cleanHeader(body.to);
+    const subject = cleanHeader(
+      body.subject || `Purchase Order ${body.poNumber || ""}`.trim()
+    );
+    const html = String(body.html || "").trim();
+    const text = String(body.text || "").trim();
+
+    if (!to) {
+      return NextResponse.json(
+        { success: false, error: "Missing recipient email address." },
+        { status: 400 }
+      );
+    }
+
+    if (!subject) {
+      return NextResponse.json(
+        { success: false, error: "Missing email subject." },
+        { status: 400 }
+      );
+    }
+
+    if (!html && !text) {
+      return NextResponse.json(
+        { success: false, error: "Missing email body." },
+        { status: 400 }
+      );
+    }
 
     const gmail = google.gmail({
       version: "v1",
       auth: oauth2Client,
     });
 
-    const itemsHtml = rows
-      .map(
-        (row: any) => `
-          <tr>
-            <td style="border:1px solid #ccc;padding:8px;">${row.itemDescription}</td>
-            <td style="border:1px solid #ccc;padding:8px;">${row.sku}</td>
-            <td style="border:1px solid #ccc;padding:8px;">${row.category}</td>
-            <td style="border:1px solid #ccc;padding:8px;">${row.ordered}</td>
-            <td style="border:1px solid #ccc;padding:8px;">$${row.amount}</td>
-          </tr>
-        `
-      )
-      .join("");
-
-    const html = `
-      <div style="font-family:Arial,sans-serif;">
-        <h2>Purchase Order ${poNumber}</h2>
-
-        <p><strong>Vendor:</strong> ${vendor}</p>
-        <p><strong>Customer:</strong> ${customer}</p>
-        <p><strong>Ship Date:</strong> ${shipDate}</p>
-        <p><strong>Total:</strong> $${total}</p>
-
-        <table style="border-collapse:collapse;width:100%;">
-          <thead>
-            <tr>
-              <th style="border:1px solid #ccc;padding:8px;">Item</th>
-              <th style="border:1px solid #ccc;padding:8px;">SKU</th>
-              <th style="border:1px solid #ccc;padding:8px;">Category</th>
-              <th style="border:1px solid #ccc;padding:8px;">Qty</th>
-              <th style="border:1px solid #ccc;padding:8px;">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemsHtml}
-          </tbody>
-        </table>
-
-        <br/>
-
-        <p>Regards,</p>
-        <p><strong>Kevin Galang</strong></p>
-      </div>
-    `;
-
     const messageParts = [
-      "From: Kevin Galang <kevingalang.mcg@gmail.com>",
-      "To: mcgalang14@gmail.com",
-      `Subject: Purchase Order ${poNumber}`,
+      `From: ${from}`,
+      `To: ${to}`,
+      `Subject: ${subject}`,
       "MIME-Version: 1.0",
       "Content-Type: text/html; charset=UTF-8",
       "",
-      html,
+      html || text.replace(/\n/g, "<br/>"),
     ];
 
-    const message = messageParts.join("\n");
-
-    const encodedMessage = Buffer.from(message)
-      .toString("base64")
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
-
-    await gmail.users.messages.send({
+    const response = await gmail.users.messages.send({
       userId: "me",
       requestBody: {
-        raw: encodedMessage,
+        raw: encodeBase64Url(messageParts.join("\n")),
       },
     });
 
     return NextResponse.json({
       success: true,
+      messageId: response.data.id,
     });
-  } catch (error: any) {
-    console.error(error);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unable to send PO email.";
 
-    return NextResponse.json({
-      success: false,
-      error: error.message,
-    });
+    return NextResponse.json(
+      {
+        success: false,
+        error: message,
+      },
+      { status: 500 }
+    );
   }
 }

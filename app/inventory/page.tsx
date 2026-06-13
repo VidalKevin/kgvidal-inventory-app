@@ -85,17 +85,40 @@ type ShopifyInventoryResponse = {
 };
 
 type VendorRow = {
+  id?: string;
   mfg: string;
+  code?: string;
   order_at: string;
   link: string;
   contact: string;
   email: string;
   phone: string;
+  settings?: VendorSettings | null;
 };
 
 type VendorResponse = {
   vendors: VendorRow[];
   error?: string;
+};
+
+type VendorTableColumn = {
+  header: string;
+  field: string;
+};
+
+type VendorSettings = {
+  emailSubject?: string;
+  emailBody?: string;
+  pdfEmailBody?: string;
+  tableColumns?: VendorTableColumn[];
+};
+
+type EmailPreview = {
+  from: string;
+  to: string;
+  subject: string;
+  bodyText: string;
+  bodyHtml: string;
 };
 
 type SyncScheduleResponse = {
@@ -110,6 +133,14 @@ type SyncScheduleResponse = {
 
 type ApprovedSaveState = "idle" | "saving" | "saved" | "error";
 
+const DEFAULT_EMAIL_FROM = "Kevin Galang <kevingalang@vidalcoaching.com>";
+const DEFAULT_EMAIL_COLUMNS: VendorTableColumn[] = [
+  { header: "Product Title", field: "Product Title" },
+  { header: "Variant", field: "Variant" },
+  { header: "SKU", field: "SKU" },
+  { header: "Qty", field: "Qty" },
+];
+
 function escapeHtml(value: string | number) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -117,6 +148,19 @@ function escapeHtml(value: string | number) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function poDateCode(dateValue: string | Date | undefined) {
+  const date = parseLocalDate(dateValue);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const year = String(date.getFullYear()).slice(-2);
+
+  return `${month}.${day}.${year}`;
+}
+
+function normalizeFieldName(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 function roundUpToUom(value: number, uom: number) {
@@ -281,6 +325,7 @@ export default function InventoryPage() {
   const [activePoVendor, setActivePoVendor] = useState<string | null>(null);
   const [savedPoNumber, setSavedPoNumber] = useState("");
   const [emailPreviewOpen, setEmailPreviewOpen] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
   const [columnFilters, setColumnFilters] = useState<Record<ColumnFilterKey, string>>({
     productTitle: "All",
     variantTitle: "All",
@@ -772,19 +817,200 @@ export default function InventoryPage() {
     doc.save(`${poNumber}.pdf`);
   };
 
-  const emailPreview = useMemo(() => {
+  const getEmailFieldValue = useCallback((row: InventoryRow, field: string) => {
+    const approved = getApprovedQty(row);
+
+    switch (normalizeFieldName(field)) {
+      case "producttitle":
+      case "item":
+        return row.productTitle;
+      case "variant":
+      case "varianttitle":
+        return row.variantTitle || "Default Title";
+      case "sku":
+        return row.sku;
+      case "qty":
+      case "quantity":
+      case "approved":
+        return approved;
+      case "vendor":
+      case "brand":
+        return row.vendor;
+      case "onorder":
+        return row.onOrder;
+      case "sales90d":
+      case "90dsales":
+      case "90daysales":
+        return row.sell90Day;
+      case "weekly":
+      case "weeklysellrate":
+        return row.weeklyRate;
+      case "needed":
+        return row.qtyNeeded;
+      case "cost":
+      case "total":
+      case "barcode":
+      case "notes":
+        return "";
+      default:
+        return row.productTitle;
+    }
+  }, [getApprovedQty]);
+
+  const emailPreview = useMemo<EmailPreview>(() => {
     const poDate = getPurchaseOrderDate(effectiveDate || poRows[0]?.date);
-    const poNumber = savedPoNumber || buildPoNumber(activePoVendor ?? poRows[0]?.vendor ?? "PO", poDate);
-    const lines = poRows
-      .map((row) => `${row.sku} - ${row.productTitle}: ${getApprovedQty(row)}`)
-      .join("\n");
+    const dateCode = poDateCode(poDate);
+    const vendorName = activePoVendor ?? poRows[0]?.vendor ?? "Vendor";
+    const vendorCode = activeVendorDetails?.code || vendorName;
+    const poNumber = savedPoNumber || buildPoNumber(vendorName, poDate);
+    const settings = activeVendorDetails?.settings ?? null;
+    const tableColumns =
+      settings?.tableColumns && settings.tableColumns.length > 0
+        ? settings.tableColumns
+        : DEFAULT_EMAIL_COLUMNS;
+    const subjectTemplate =
+      settings?.emailSubject?.trim() || `${vendorCode} x ${dateCode}`;
+    const bodyTemplate =
+      settings?.emailBody?.trim() ||
+      `Hi {{contact}},\n\nKindly see our order this week.\n\n{{table}}\n\nThanks`;
+    const tableRows = poRows.map((row) =>
+      tableColumns.map((column) => String(getEmailFieldValue(row, column.field)))
+    );
+    const tableText = [
+      tableColumns.map((column) => column.header).join("\t"),
+      ...tableRows.map((values) => values.join("\t")),
+    ].join("\n");
+    const tableHtml = `
+      <table style="border-collapse:collapse;">
+        <thead>
+          <tr>
+            ${tableColumns
+              .map(
+                (column) =>
+                  `<th style="border:1px solid #1f2937;background:#1f5f8b;color:#ffffff;padding:3px 6px;text-align:left;">${escapeHtml(column.header)}</th>`
+              )
+              .join("")}
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows
+            .map(
+              (values) =>
+                `<tr>${values
+                  .map(
+                    (value, index) =>
+                      `<td style="border:1px solid #1f2937;padding:3px 6px;${
+                        normalizeFieldName(tableColumns[index]?.field || "") ===
+                          "qty" ||
+                        normalizeFieldName(tableColumns[index]?.field || "") ===
+                          "approved"
+                          ? "text-align:right;"
+                          : ""
+                      }">${escapeHtml(value)}</td>`
+                  )
+                  .join("")}</tr>`
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `;
+    const replacements: Record<string, string> = {
+      contact: activeVendorDetails?.contact || activeVendorDetails?.mfg || vendorName,
+      table: tableText,
+      poNumber,
+      vendor: vendorName,
+      code: vendorCode,
+      date: dateCode,
+      orderDate: dateCode,
+    };
+    const htmlReplacements = Object.fromEntries(
+      Object.entries(replacements).map(([key, value]) => [key, escapeHtml(value)])
+    ) as Record<string, string>;
+    htmlReplacements.table = tableHtml;
+    const rawHtmlTemplate = bodyTemplate
+      .split("\n\n")
+      .map((block) => `<p>${escapeHtml(block).replace(/\n/g, "<br/>")}</p>`)
+      .join("");
+    const htmlTemplate = rawHtmlTemplate.replace(
+      `<p>${escapeHtml("{{table}}")}</p>`,
+      tableHtml
+    );
+    const replacePlaceholders = (template: string, values: Record<string, string>) =>
+      template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => {
+        return values[key] ?? values[key.charAt(0).toLowerCase() + key.slice(1)] ?? "";
+      });
+    const bodyText = replacePlaceholders(bodyTemplate, replacements);
+    const bodyHtml = replacePlaceholders(htmlTemplate, htmlReplacements);
 
     return {
-      to: "Vendor email pending",
-      subject: `Purchase Order ${poNumber}`,
-      body: `Hello,\n\nPlease process the attached purchase order for ${activePoVendor ?? "this vendor"}.\n\n${lines}\n\nThank you.`,
+      from: DEFAULT_EMAIL_FROM,
+      to: activeVendorDetails?.email || activeVendorDetails?.link || "",
+      subject: replacePlaceholders(subjectTemplate, replacements),
+      bodyText,
+      bodyHtml,
     };
-  }, [activePoVendor, poRows, savedPoNumber, getApprovedQty, effectiveDate]);
+  }, [
+    activePoVendor,
+    activeVendorDetails,
+    effectiveDate,
+    getEmailFieldValue,
+    poRows,
+    savedPoNumber,
+  ]);
+
+  const sendPurchaseOrderEmail = async () => {
+    if (!emailPreview.to) {
+      setInventoryMessage({
+        type: "error",
+        text: "Vendor email is missing. Add an email address in Vendor Details first.",
+      });
+      return;
+    }
+
+    setSendingEmail(true);
+
+    try {
+      const poNumber = await savePurchaseOrder();
+
+      if (!poNumber) {
+        return;
+      }
+
+      const response = await fetch("/api/send-po-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: emailPreview.from,
+          to: emailPreview.to,
+          subject: emailPreview.subject,
+          html: emailPreview.bodyHtml,
+          text: emailPreview.bodyText,
+          poNumber,
+          vendor: activePoVendor,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Unable to send email.");
+      }
+
+      setInventoryMessage({
+        type: "success",
+        text: `Sent ${emailPreview.subject} to ${emailPreview.to}.`,
+      });
+      setEmailPreviewOpen(false);
+    } catch (error) {
+      setInventoryMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Unable to send email.",
+      });
+    } finally {
+      setSendingEmail(false);
+    }
+  };
 
   const syncShopifyInventory = async () => {
     setSyncingShopify(true);
@@ -1573,6 +1799,14 @@ export default function InventoryPage() {
             <div className="space-y-3 p-5 text-sm">
               <div>
                 <p className="text-xs font-semibold uppercase text-slate-500">
+                  From
+                </p>
+                <p className="mt-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  {emailPreview.from}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-500">
                   To
                 </p>
                 <p className="mt-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
@@ -1591,9 +1825,10 @@ export default function InventoryPage() {
                 <p className="text-xs font-semibold uppercase text-slate-500">
                   Body
                 </p>
-                <pre className="mt-1 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-sans text-sm text-slate-700">
-                  {emailPreview.body}
-                </pre>
+                <div
+                  className="mt-1 max-h-80 overflow-auto rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900"
+                  dangerouslySetInnerHTML={{ __html: emailPreview.bodyHtml }}
+                />
               </div>
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
@@ -1606,17 +1841,11 @@ export default function InventoryPage() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  void savePurchaseOrder();
-                  setInventoryMessage({
-                    type: "success",
-                    text: "Email sending is ready to connect once the final vendor email format is confirmed.",
-                  });
-                  setEmailPreviewOpen(false);
-                }}
-                className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                onClick={() => void sendPurchaseOrderEmail()}
+                disabled={sendingEmail || !emailPreview.to}
+                className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Confirm Preview
+                {sendingEmail ? "Sending..." : "Send Email"}
               </button>
             </div>
           </div>
