@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/shopify-sync",
-      "schedule": "30 11 * * 5"
+      "schedule": "0 0 * * 6"
     }
   ]
 }

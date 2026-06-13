@@ -3,8 +3,9 @@ name: Shopify Scheduled Sync
 on:
   workflow_dispatch:
   schedule:
-    # Every 4 hours
-    - cron: "0 */4 * * *"
+    # Lightweight schedule check. The app only runs Shopify sync when
+    # the saved Supabase schedule is due.
+    - cron: "*/30 * * * 5,6"
 
 jobs:
   shopify-sync:
