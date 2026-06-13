@@ -85,59 +85,17 @@ type ShopifyInventoryResponse = {
 };
 
 type VendorRow = {
-  id?: string;
   mfg: string;
-  code?: string;
   order_at: string;
   link: string;
   contact: string;
   email: string;
   phone: string;
-  settings?: VendorSettings | null;
 };
 
 type VendorResponse = {
   vendors: VendorRow[];
   error?: string;
-};
-
-type VendorTableColumn = {
-  header: string;
-  field: string;
-};
-
-type PdfSkuMapping = {
-  sku: string;
-  itemSku: string;
-  itemName: string;
-};
-
-type PdfFormField = {
-  key?: string;
-  label: string;
-  value: string;
-};
-
-type VendorSettings = {
-  emailSubject?: string;
-  emailBody?: string;
-  pdfEmailBody?: string;
-  pdfEnabled?: boolean;
-  pdfSampleName?: string;
-  pdfEditableFields?: string[];
-  pdfFormFields?: PdfFormField[];
-  pdfSkuMappings?: PdfSkuMapping[];
-  tableColumns?: VendorTableColumn[];
-};
-
-type EmailPreview = {
-  from: string;
-  to: string;
-  subject: string;
-  bodyText: string;
-  bodyHtml: string;
-  usesPdfFormat: boolean;
-  attachmentName?: string;
 };
 
 type SyncScheduleResponse = {
@@ -152,14 +110,6 @@ type SyncScheduleResponse = {
 
 type ApprovedSaveState = "idle" | "saving" | "saved" | "error";
 
-const DEFAULT_EMAIL_FROM = "Kevin Galang <kevin@vidalcoaching.com>";
-const DEFAULT_EMAIL_COLUMNS: VendorTableColumn[] = [
-  { header: "Product Title", field: "Product Title" },
-  { header: "Variant", field: "Variant" },
-  { header: "SKU", field: "SKU" },
-  { header: "Qty", field: "Qty" },
-];
-
 function escapeHtml(value: string | number) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -169,32 +119,15 @@ function escapeHtml(value: string | number) {
     .replace(/'/g, "&#39;");
 }
 
-function poDateCode(dateValue: string | Date | undefined) {
-  const date = parseLocalDate(dateValue);
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const year = String(date.getFullYear()).slice(-2);
-
-  return `${month}.${day}.${year}`;
-}
-
-function normalizeFieldName(value: string) {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-function getFirstName(value: string | undefined | null) {
-  return String(value || "").trim().split(/\s+/)[0] || "";
-}
-
-function roundUpToUom(value: number, uom: number) {
+function roundToUom(value: number, uom: number) {
   const safeUom = uom > 0 ? uom : 1;
   const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
 
-  if (safeValue === 0) {
-    return 0;
+  if (safeValue === 0 || safeUom <= 1) {
+    return safeValue;
   }
 
-  return Math.ceil(safeValue / safeUom) * safeUom;
+  return Math.max(safeUom, Math.round(safeValue / safeUom) * safeUom);
 }
 
 function normalizeVendor(value: string) {
@@ -285,11 +218,6 @@ function getPurchaseOrderDate(dateValue: string | Date | undefined) {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
-function getPdfDisplayDate(dateValue: string | Date | undefined) {
-  const date = parseLocalDate(dateValue);
-  return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
-}
-
 function normalizeText(value: string) {
   return value.trim().toLowerCase();
 }
@@ -341,6 +269,7 @@ export default function InventoryPage() {
   const [scheduleDays, setScheduleDays] = useState<string[]>(() => getSavedSyncSchedule().days);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [inventoryMessage, setInventoryMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [uomNotice, setUomNotice] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [approvedQtyBySku, setApprovedQtyBySku] = useState<Record<string, number>>({});
   const [, setApprovedSaveBySku] = useState<Record<string, ApprovedSaveState>>({});
@@ -353,7 +282,6 @@ export default function InventoryPage() {
   const [activePoVendor, setActivePoVendor] = useState<string | null>(null);
   const [savedPoNumber, setSavedPoNumber] = useState("");
   const [emailPreviewOpen, setEmailPreviewOpen] = useState(false);
-  const [sendingEmail, setSendingEmail] = useState(false);
   const [columnFilters, setColumnFilters] = useState<Record<ColumnFilterKey, string>>({
     productTitle: "All",
     variantTitle: "All",
@@ -371,6 +299,24 @@ export default function InventoryPage() {
     status: "All",
   });
   const [openDropdown, setOpenDropdown] = useState<ColumnFilterKey | null>(null);
+
+  useEffect(() => {
+    if (!uomNotice) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setUomNotice(null);
+    }, 3000);
+
+    return () => window.clearTimeout(timer);
+  }, [uomNotice]);
+
+  const showUomNotice = (uom: number) => {
+    if (uom > 1) {
+      setUomNotice(`UOM is ${uom}. Approved quantity was rounded to the nearest UOM.`);
+    }
+  };
 
   const loadShopifyInventory = async (refresh = false, date = selectedDate) => {
     setLoadingInventory(true);
@@ -781,161 +727,6 @@ export default function InventoryPage() {
     }
   };
 
-  const pdfOrderDetails = useMemo(() => {
-    const settings = activeVendorDetails?.settings;
-    const poDateValue = effectiveDate || poRows[0]?.date || getTodayDate();
-    const poDate = getPurchaseOrderDate(poDateValue);
-    const displayDate = getPdfDisplayDate(poDateValue);
-    const vendorName = activePoVendor ?? poRows[0]?.vendor ?? "Vendor";
-    const usesVendorPdfConfiguration = Boolean(settings?.pdfEnabled);
-    const pdfMappings =
-      usesVendorPdfConfiguration && Array.isArray(settings?.pdfSkuMappings)
-        ? settings.pdfSkuMappings
-        : [];
-    const mappingBySku = new Map(
-      pdfMappings
-        .filter((mapping) => mapping.sku)
-        .map((mapping) => [normalizeText(mapping.sku), mapping])
-    );
-    const formFields =
-      usesVendorPdfConfiguration && Array.isArray(settings?.pdfFormFields)
-        ? settings.pdfFormFields
-            .filter((field) => field.label.trim())
-            .map((field) => ({
-              ...field,
-              value:
-                field.key === "orderDate" && !field.value.trim()
-                  ? displayDate
-                  : field.value,
-            }))
-        : [];
-    const rows = poRows.map((row) => {
-      const mappedItem = mappingBySku.get(normalizeText(row.sku));
-      const itemName =
-        usesVendorPdfConfiguration && mappedItem?.itemName
-          ? mappedItem.itemName
-          : row.variantTitle && row.variantTitle !== "Default Title"
-            ? `${row.productTitle} - ${row.variantTitle}`
-            : row.productTitle;
-      const itemSku =
-        usesVendorPdfConfiguration && mappedItem?.itemSku
-          ? mappedItem.itemSku
-          : row.sku || "-";
-
-      return {
-        itemSku,
-        itemName,
-        qty: getApprovedQty(row),
-      };
-    });
-
-    return {
-      displayDate,
-      formFields,
-      poDate,
-      rows,
-      usesVendorPdfConfiguration,
-      vendorName,
-    };
-  }, [
-    activePoVendor,
-    activeVendorDetails,
-    effectiveDate,
-    getApprovedQty,
-    poRows,
-  ]);
-
-  const buildPurchaseOrderPdfDocument = () => {
-    const poNumber = ensurePoNumber();
-    const doc = new jsPDF();
-    const { formFields, poDate, rows, usesVendorPdfConfiguration } =
-      pdfOrderDetails;
-    let y = 18;
-
-    doc.setFontSize(16);
-    doc.text(
-      usesVendorPdfConfiguration ? `${activePoVendor} Order` : "Purchase Order",
-      14,
-      y
-    );
-    y += 9;
-    doc.setFontSize(10);
-
-    if (usesVendorPdfConfiguration && formFields.length > 0) {
-      const leftX = 14;
-      const rightX = 108;
-      const labelWidth = 31;
-      const valueWidth = 48;
-
-      formFields.forEach((field, index) => {
-        const x = index % 2 === 0 ? leftX : rightX;
-        const value = field.value.trim();
-        const valueLines = doc.splitTextToSize(value || "-", valueWidth);
-
-        doc.setFont("helvetica", "bold");
-        doc.text(`${field.label}:`, x, y);
-        doc.setFont("helvetica", "normal");
-        doc.text(valueLines, x + labelWidth, y);
-
-        if (index % 2 === 1) {
-          y += Math.max(7, valueLines.length * 5);
-        }
-      });
-
-      if (formFields.length % 2 === 1) {
-        y += 7;
-      }
-
-      y += 4;
-    } else {
-      doc.text(`PO Number: ${poNumber}`, 14, y);
-      y += 6;
-      doc.text(`Vendor: ${activePoVendor}`, 14, y);
-      y += 6;
-      doc.text(`Date: ${poDate}`, 14, y);
-      y += 9;
-    }
-
-    doc.setFontSize(9);
-    if (usesVendorPdfConfiguration) {
-      doc.text("Item SKU # / Private label SKU #", 14, y);
-      doc.text("Item Name (Flavor):", 78, y);
-      doc.text("Item Quantity:", 178, y, { align: "right" });
-    } else {
-      doc.text("SKU", 14, y);
-      doc.text("Item", 48, y);
-      doc.text("Approved", 178, y, { align: "right" });
-    }
-    y += 4;
-    doc.line(14, y, 195, y);
-    y += 6;
-
-    rows.forEach((row) => {
-      const itemLines = doc.splitTextToSize(
-        row.itemName,
-        usesVendorPdfConfiguration ? 88 : 110
-      );
-
-      if (y > 270) {
-        doc.addPage();
-        y = 18;
-      }
-
-      doc.text(row.itemSku, 14, y);
-      doc.text(itemLines, usesVendorPdfConfiguration ? 78 : 48, y);
-      doc.text(String(row.qty), 178, y, { align: "right" });
-      y += Math.max(6, itemLines.length * 5);
-    });
-
-    y += 4;
-    doc.line(14, y, 195, y);
-    y += 7;
-    doc.setFontSize(11);
-    doc.text(`Total approved qty: ${poApprovedTotal}`, 14, y);
-
-    return { doc, poNumber };
-  };
-
   const generatePurchaseOrderPdf = (mode: "preview" | "download") => {
     if (!activePoVendor || poRows.length === 0) {
       setInventoryMessage({
@@ -945,7 +736,52 @@ export default function InventoryPage() {
       return;
     }
 
-    const { doc, poNumber } = buildPurchaseOrderPdfDocument();
+    const poNumber = ensurePoNumber();
+    const doc = new jsPDF();
+    let y = 18;
+
+    doc.setFontSize(16);
+    doc.text("Purchase Order", 14, y);
+    y += 9;
+    doc.setFontSize(10);
+    doc.text(`PO Number: ${poNumber}`, 14, y);
+    y += 6;
+    doc.text(`Vendor: ${activePoVendor}`, 14, y);
+    y += 6;
+    doc.text(`Date: ${getPurchaseOrderDate(effectiveDate || poRows[0]?.date || getTodayDate())}`, 14, y);
+    y += 9;
+
+    doc.setFontSize(9);
+    doc.text("SKU", 14, y);
+    doc.text("Item", 48, y);
+    doc.text("Approved", 178, y, { align: "right" });
+    y += 4;
+    doc.line(14, y, 195, y);
+    y += 6;
+
+    poRows.forEach((row) => {
+      const itemName =
+        row.variantTitle && row.variantTitle !== "Default Title"
+          ? `${row.productTitle} - ${row.variantTitle}`
+          : row.productTitle;
+      const itemLines = doc.splitTextToSize(itemName, 110);
+
+      if (y > 270) {
+        doc.addPage();
+        y = 18;
+      }
+
+      doc.text(row.sku || "-", 14, y);
+      doc.text(itemLines, 48, y);
+      doc.text(String(getApprovedQty(row)), 178, y, { align: "right" });
+      y += Math.max(6, itemLines.length * 5);
+    });
+
+    y += 4;
+    doc.line(14, y, 195, y);
+    y += 7;
+    doc.setFontSize(11);
+    doc.text(`Total approved qty: ${poApprovedTotal}`, 14, y);
 
     if (mode === "preview") {
       window.open(doc.output("bloburl"), "_blank");
@@ -955,274 +791,19 @@ export default function InventoryPage() {
     doc.save(`${poNumber}.pdf`);
   };
 
-  const getEmailFieldValue = useCallback((row: InventoryRow, field: string) => {
-    const approved = getApprovedQty(row);
-
-    switch (normalizeFieldName(field)) {
-      case "producttitle":
-      case "item":
-        return row.productTitle;
-      case "variant":
-      case "varianttitle":
-        return row.variantTitle || "Default Title";
-      case "sku":
-        return row.sku;
-      case "qty":
-      case "quantity":
-      case "approved":
-        return approved;
-      case "vendor":
-      case "brand":
-        return row.vendor;
-      case "onorder":
-        return row.onOrder;
-      case "sales90d":
-      case "90dsales":
-      case "90daysales":
-        return row.sell90Day;
-      case "weekly":
-      case "weeklysellrate":
-        return row.weeklyRate;
-      case "needed":
-        return row.qtyNeeded;
-      case "cost":
-      case "total":
-      case "barcode":
-      case "notes":
-        return "";
-      default:
-        return row.productTitle;
-    }
-  }, [getApprovedQty]);
-
-  const emailPreview = useMemo<EmailPreview>(() => {
+  const emailPreview = useMemo(() => {
     const poDate = getPurchaseOrderDate(effectiveDate || poRows[0]?.date);
-    const dateCode = poDateCode(poDate);
-    const vendorName = activePoVendor ?? poRows[0]?.vendor ?? "Vendor";
-    const vendorCode = activeVendorDetails?.code || vendorName;
-    const poNumber = savedPoNumber || buildPoNumber(vendorName, poDate);
-    const settings = activeVendorDetails?.settings ?? null;
-    const usesPdfFormat = Boolean(settings?.pdfEnabled);
-    const tableColumns =
-      settings?.tableColumns && settings.tableColumns.length > 0
-        ? settings.tableColumns
-        : DEFAULT_EMAIL_COLUMNS;
-    const subjectTemplate =
-      settings?.emailSubject?.trim() || `${vendorCode} x ${dateCode}`;
-    const bodyTemplate =
-      usesPdfFormat
-        ? settings?.pdfEmailBody?.trim() ||
-          `Hi {{contact}},\n\nKindly see attached for our order this week.\n\n{{table}}\n\nThanks`
-        : settings?.emailBody?.trim() ||
-          `Hi {{contact}},\n\nKindly see our order this week.\n\n{{table}}\n\nThanks`;
-    const tableRows = poRows.map((row) =>
-      tableColumns.map((column) => String(getEmailFieldValue(row, column.field)))
-    );
-    const tableText = [
-      tableColumns.map((column) => column.header).join("\t"),
-      ...tableRows.map((values) => values.join("\t")),
-    ].join("\n");
-    const tableHtml = `
-      <table style="border-collapse:collapse;">
-        <thead>
-          <tr>
-            ${tableColumns
-              .map(
-                (column) =>
-                  `<th style="border:1px solid #1f2937;background:#1f5f8b;color:#ffffff;padding:3px 6px;text-align:left;">${escapeHtml(column.header)}</th>`
-              )
-              .join("")}
-          </tr>
-        </thead>
-        <tbody>
-          ${tableRows
-            .map(
-              (values) =>
-                `<tr>${values
-                  .map(
-                    (value, index) =>
-                      `<td style="border:1px solid #1f2937;padding:3px 6px;${
-                        normalizeFieldName(tableColumns[index]?.field || "") ===
-                          "qty" ||
-                        normalizeFieldName(tableColumns[index]?.field || "") ===
-                          "approved"
-                          ? "text-align:right;"
-                          : ""
-                      }">${escapeHtml(value)}</td>`
-                  )
-                  .join("")}</tr>`
-            )
-            .join("")}
-        </tbody>
-      </table>
-    `;
-    const pdfFieldsText = pdfOrderDetails.formFields
-      .map((field) => `${field.label}: ${field.value || "-"}`)
+    const poNumber = savedPoNumber || buildPoNumber(activePoVendor ?? poRows[0]?.vendor ?? "PO", poDate);
+    const lines = poRows
+      .map((row) => `${row.sku} - ${row.productTitle}: ${getApprovedQty(row)}`)
       .join("\n");
-    const pdfRowsText = [
-      "Item SKU # / Private label SKU #\tItem Name (Flavor):\tItem Quantity:",
-      ...pdfOrderDetails.rows.map(
-        (row) => `${row.itemSku}\t${row.itemName}\t${row.qty}`
-      ),
-    ].join("\n");
-    const pdfTableText = [pdfFieldsText, pdfRowsText].filter(Boolean).join("\n\n");
-    const pdfFieldsHtml = pdfOrderDetails.formFields.length
-      ? `<table style="border-collapse:collapse;margin-bottom:12px;width:100%;max-width:680px;">
-          <tbody>
-            ${pdfOrderDetails.formFields
-              .map(
-                (field) =>
-                  `<tr><td style="border:1px solid #1f2937;padding:5px 7px;font-weight:700;width:32%;">${escapeHtml(field.label)}</td><td style="border:1px solid #1f2937;padding:5px 7px;white-space:pre-line;">${escapeHtml(field.value || "-")}</td></tr>`
-              )
-              .join("")}
-          </tbody>
-        </table>`
-      : "";
-    const pdfRowsHtml = `
-      <table style="border-collapse:collapse;width:100%;max-width:680px;">
-        <thead>
-          <tr>
-            <th style="border:1px solid #1f2937;background:#1f5f8b;color:#ffffff;padding:4px 7px;text-align:left;">Item SKU # / Private label SKU #</th>
-            <th style="border:1px solid #1f2937;background:#1f5f8b;color:#ffffff;padding:4px 7px;text-align:left;">Item Name (Flavor):</th>
-            <th style="border:1px solid #1f2937;background:#1f5f8b;color:#ffffff;padding:4px 7px;text-align:right;">Item Quantity:</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${pdfOrderDetails.rows
-            .map(
-              (row) =>
-                `<tr><td style="border:1px solid #1f2937;padding:4px 7px;">${escapeHtml(row.itemSku)}</td><td style="border:1px solid #1f2937;padding:4px 7px;">${escapeHtml(row.itemName)}</td><td style="border:1px solid #1f2937;padding:4px 7px;text-align:right;">${escapeHtml(row.qty)}</td></tr>`
-            )
-            .join("")}
-        </tbody>
-      </table>
-    `;
-    const pdfTableHtml = `${pdfFieldsHtml}${pdfRowsHtml}`;
-    const replacements: Record<string, string> = {
-      contact:
-        getFirstName(
-          activeVendorDetails?.contact || activeVendorDetails?.mfg || vendorName
-        ) || vendorName,
-      table: usesPdfFormat ? pdfTableText : tableText,
-      poNumber,
-      vendor: vendorName,
-      code: vendorCode,
-      date: dateCode,
-      orderDate: dateCode,
-    };
-    const htmlReplacements = Object.fromEntries(
-      Object.entries(replacements).map(([key, value]) => [key, escapeHtml(value)])
-    ) as Record<string, string>;
-    htmlReplacements.table = usesPdfFormat ? pdfTableHtml : tableHtml;
-    const rawHtmlTemplate = bodyTemplate
-      .split("\n\n")
-      .map((block) => `<p>${escapeHtml(block).replace(/\n/g, "<br/>")}</p>`)
-      .join("");
-    const htmlTemplate = rawHtmlTemplate.replace(
-      `<p>${escapeHtml("{{table}}")}</p>`,
-      usesPdfFormat ? pdfTableHtml : tableHtml
-    );
-    const replacePlaceholders = (template: string, values: Record<string, string>) =>
-      template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => {
-        return values[key] ?? values[key.charAt(0).toLowerCase() + key.slice(1)] ?? "";
-      });
-    const bodyTextBase = replacePlaceholders(bodyTemplate, replacements);
-    const bodyHtmlBase = replacePlaceholders(htmlTemplate, htmlReplacements);
-    const hasTablePlaceholder = /\{\{\s*table\s*\}\}/i.test(bodyTemplate);
-    const bodyText =
-      usesPdfFormat && !hasTablePlaceholder
-        ? `${bodyTextBase}\n\n${pdfTableText}`
-        : bodyTextBase;
-    const bodyHtml =
-      usesPdfFormat && !hasTablePlaceholder
-        ? `${bodyHtmlBase}${pdfTableHtml}`
-        : bodyHtmlBase;
 
     return {
-      from: DEFAULT_EMAIL_FROM,
-      to: activeVendorDetails?.email || activeVendorDetails?.link || "",
-      subject: replacePlaceholders(subjectTemplate, replacements),
-      bodyText,
-      bodyHtml,
-      usesPdfFormat,
-      attachmentName: usesPdfFormat ? `${poNumber}.pdf` : undefined,
+      to: "Vendor email pending",
+      subject: `Purchase Order ${poNumber}`,
+      body: `Hello,\n\nPlease process the attached purchase order for ${activePoVendor ?? "this vendor"}.\n\n${lines}\n\nThank you.`,
     };
-  }, [
-    activePoVendor,
-    activeVendorDetails,
-    effectiveDate,
-    getEmailFieldValue,
-    pdfOrderDetails,
-    poRows,
-    savedPoNumber,
-  ]);
-
-  const sendPurchaseOrderEmail = async () => {
-    if (!emailPreview.to) {
-      setInventoryMessage({
-        type: "error",
-        text: "Vendor email is missing. Add an email address in Vendor Details first.",
-      });
-      return;
-    }
-
-    setSendingEmail(true);
-
-    try {
-      const poNumber = await savePurchaseOrder();
-
-      if (!poNumber) {
-        return;
-      }
-
-      const attachments = emailPreview.usesPdfFormat
-        ? [
-            {
-              filename: `${poNumber}.pdf`,
-              contentType: "application/pdf",
-              contentBase64: buildPurchaseOrderPdfDocument()
-                .doc.output("datauristring")
-                .split(",")[1],
-            },
-          ]
-        : [];
-
-      const response = await fetch("/api/send-po-email", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: emailPreview.from,
-          to: emailPreview.to,
-          subject: emailPreview.subject,
-          html: emailPreview.bodyHtml,
-          text: emailPreview.bodyText,
-          poNumber,
-          vendor: activePoVendor,
-          attachments,
-        }),
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Unable to send email.");
-      }
-
-      setInventoryMessage({
-        type: "success",
-        text: `Sent ${emailPreview.subject} to ${emailPreview.to}.`,
-      });
-      setEmailPreviewOpen(false);
-    } catch (error) {
-      setInventoryMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "Unable to send email.",
-      });
-    } finally {
-      setSendingEmail(false);
-    }
-  };
+  }, [activePoVendor, poRows, savedPoNumber, getApprovedQty, effectiveDate]);
 
   const syncShopifyInventory = async () => {
     setSyncingShopify(true);
@@ -1436,13 +1017,18 @@ export default function InventoryPage() {
     }
   };
 
-  const setApprovedQty = (sku: string, value: number, uom = 1, normalize = false) => {
-    const nextValue = normalize ? roundUpToUom(value, uom) : Math.max(0, value);
+  const setApprovedQty = (sku: string, value: number) => {
+    const nextValue = Number.isFinite(value) ? Math.max(0, value) : 0;
     setApprovedQtyBySku((prev) => ({ ...prev, [sku]: nextValue }));
   };
 
   const commitApprovedQty = (row: InventoryRow, value: number) => {
-    const nextValue = roundUpToUom(value, row.uom);
+    const nextValue = roundToUom(value, row.uom);
+
+    if (nextValue !== Math.max(0, Number.isFinite(value) ? value : 0)) {
+      showUomNotice(row.uom);
+    }
+
     setApprovedQtyBySku((prev) => ({ ...prev, [row.sku]: nextValue }));
     void saveApprovedQty(row, nextValue);
   };
@@ -1451,7 +1037,7 @@ export default function InventoryPage() {
     const current = approvedQtyBySku[row.sku] ?? fallback;
     const step = row.uom > 0 ? row.uom : 1;
     const nextValue = current + direction * step;
-    const approvedValue = roundUpToUom(nextValue, step);
+    const approvedValue = roundToUom(nextValue, step);
     setApprovedQtyBySku((prev) => ({ ...prev, [row.sku]: approvedValue }));
     void saveApprovedQty(row, approvedValue);
   };
@@ -1578,6 +1164,12 @@ export default function InventoryPage() {
           </div>
         )}
       </div>
+
+      {uomNotice && (
+        <div className="fixed bottom-5 right-5 z-[60] rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-lg">
+          {uomNotice}
+        </div>
+      )}
 
       {syncModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -1937,7 +1529,7 @@ export default function InventoryPage() {
                             type="number" min={0} value={approvedQty}
                             onFocus={() => setActiveApprovedSku(row.sku)}
                             onClick={() => setActiveApprovedSku(row.sku)}
-                            onChange={(e) => setApprovedQty(row.sku, Number(e.target.value), row.uom)}
+                            onChange={(e) => setApprovedQty(row.sku, Number(e.target.value))}
                             onBlur={(event) => commitApprovedQty(row, Number(event.currentTarget.value))}
                             onKeyDown={(event) => {
                               if (event.key === "Enter") {
@@ -2011,14 +1603,6 @@ export default function InventoryPage() {
             <div className="space-y-3 p-5 text-sm">
               <div>
                 <p className="text-xs font-semibold uppercase text-slate-500">
-                  From
-                </p>
-                <p className="mt-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  {emailPreview.from}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase text-slate-500">
                   To
                 </p>
                 <p className="mt-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
@@ -2033,24 +1617,13 @@ export default function InventoryPage() {
                   {emailPreview.subject}
                 </p>
               </div>
-              {emailPreview.usesPdfFormat && (
-                <div>
-                  <p className="text-xs font-semibold uppercase text-slate-500">
-                    Attachment
-                  </p>
-                  <p className="mt-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                    {emailPreview.attachmentName}
-                  </p>
-                </div>
-              )}
               <div>
                 <p className="text-xs font-semibold uppercase text-slate-500">
                   Body
                 </p>
-                <div
-                  className="mt-1 max-h-80 overflow-auto rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900"
-                  dangerouslySetInnerHTML={{ __html: emailPreview.bodyHtml }}
-                />
+                <pre className="mt-1 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-sans text-sm text-slate-700">
+                  {emailPreview.body}
+                </pre>
               </div>
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
@@ -2063,11 +1636,17 @@ export default function InventoryPage() {
               </button>
               <button
                 type="button"
-                onClick={() => void sendPurchaseOrderEmail()}
-                disabled={sendingEmail || !emailPreview.to}
-                className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => {
+                  void savePurchaseOrder();
+                  setInventoryMessage({
+                    type: "success",
+                    text: "Email sending is ready to connect once the final vendor email format is confirmed.",
+                  });
+                  setEmailPreviewOpen(false);
+                }}
+                className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
               >
-                {sendingEmail ? "Sending..." : "Send Email"}
+                Confirm Preview
               </button>
             </div>
           </div>
