@@ -273,11 +273,17 @@ function isEmailAddress(value: string | undefined | null) {
 
 function getVendorEmailAddress(vendor: VendorRow | null) {
   if (!vendor) return "";
-  const email = String(vendor.email || "").trim();
   const link = String(vendor.link || "").trim();
+  const email = String(vendor.email || "").trim();
+
+  // Prefer link field — it may contain comma-separated vendor contact emails
+  const linkEmails = link
+    .split(",")
+    .map((s) => s.trim())
+    .filter(isEmailAddress);
+  if (linkEmails.length > 0) return linkEmails.join(", ");
 
   if (isEmailAddress(email)) return email;
-  if (isEmailAddress(link)) return link;
 
   return "";
 }
@@ -362,6 +368,9 @@ export default function InventoryPage() {
   const [emailPreviewOpen, setEmailPreviewOpen] = useState(false);
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [editedEmailTo, setEditedEmailTo] = useState("");
+  const [editedEmailSubject, setEditedEmailSubject] = useState("");
+  const [editedEmailBody, setEditedEmailBody] = useState("");
   const [columnFilters, setColumnFilters] = useState<Record<ColumnFilterKey, string>>({
     productTitle: "All",
     variantTitle: "All",
@@ -881,14 +890,8 @@ export default function InventoryPage() {
     savedPoNumber,
   ]);
 
-  const generatePurchaseOrderPdf = (mode: "preview" | "download") => {
-    if (!pdfOrderPreview) {
-      setInventoryMessage({
-        type: "error",
-        text: "No PDF order data is available for this vendor.",
-      });
-      return;
-    }
+  const buildPurchaseOrderPdfDoc = () => {
+    if (!pdfOrderPreview) return null;
 
     const doc = new jsPDF();
     let y = 18;
@@ -903,26 +906,17 @@ export default function InventoryPage() {
     y += 10;
 
     pdfOrderPreview.formFields.forEach((field) => {
-      if (y > 265) {
-        doc.addPage();
-        y = 18;
-      }
-
+      if (y > 265) { doc.addPage(); y = 18; }
       doc.setFont("helvetica", "bold");
       doc.text(`${field.label}:`, 14, y);
       doc.setFont("helvetica", "normal");
-
       const valueLines = doc.splitTextToSize(field.value || "-", 118);
       doc.text(valueLines, 62, y);
       y += Math.max(6, valueLines.length * 5) + 3;
     });
 
     y += 4;
-
-    if (y > 250) {
-      doc.addPage();
-      y = 18;
-    }
+    if (y > 250) { doc.addPage(); y = 18; }
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
@@ -936,12 +930,7 @@ export default function InventoryPage() {
 
     pdfOrderPreview.rows.forEach((row) => {
       const itemLines = doc.splitTextToSize(row.itemName, 88);
-
-      if (y > 270) {
-        doc.addPage();
-        y = 18;
-      }
-
+      if (y > 270) { doc.addPage(); y = 18; }
       doc.text(row.itemSku || "-", 14, y);
       doc.text(itemLines, 62, y);
       doc.text(String(row.qty), 178, y, { align: "right" });
@@ -954,12 +943,48 @@ export default function InventoryPage() {
     doc.setFontSize(11);
     doc.text(`Total approved qty: ${poApprovedTotal}`, 14, y);
 
+    return doc;
+  };
+
+  const uploadPdfToSupabase = async (poNumber: string, pdfBase64: string) => {
+    const response = await fetch("/api/upload-po-pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ poNumber, pdfBase64 }),
+    });
+    const data = await response.json() as { success?: boolean; filename?: string; error?: string };
+    if (!response.ok || !data.success) throw new Error(data.error || "Upload failed.");
+    return data.filename as string;
+  };
+
+  const generatePurchaseOrderPdf = async (mode: "preview" | "download") => {
+    const doc = buildPurchaseOrderPdfDoc();
+
+    if (!doc || !pdfOrderPreview) {
+      setInventoryMessage({
+        type: "error",
+        text: "No PDF order data is available for this vendor.",
+      });
+      return;
+    }
+
     if (mode === "preview") {
       window.open(doc.output("bloburl"), "_blank");
       return;
     }
 
-    doc.save(`${pdfOrderPreview.poNumber}.pdf`);
+    // Get base64 and upload to Supabase for versioning
+    const arrayBuffer = doc.output("arraybuffer");
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const pdfBase64 = btoa(uint8Array.reduce((acc, byte) => acc + String.fromCharCode(byte), ""));
+
+    try {
+      const filename = await uploadPdfToSupabase(pdfOrderPreview.poNumber, pdfBase64);
+      doc.save(`${filename.replace(/\.pdf$/, "")}.pdf`);
+    } catch {
+      // Still download even if upload fails
+      doc.save(`${pdfOrderPreview.poNumber}.pdf`);
+    }
   };
 
   const getEmailFieldValue = useCallback((row: InventoryRow, field: string) => {
@@ -1124,10 +1149,11 @@ export default function InventoryPage() {
     `;
     const pdfTableHtml = `${pdfFieldsHtml}${pdfRowsHtml}`;
     const replacements: Record<string, string> = {
-      contact:
-        getFirstName(
-          activeVendorDetails?.contact || activeVendorDetails?.mfg || vendorName
-        ) || vendorName,
+      contact: (() => {
+        const raw = String(activeVendorDetails?.contact || "").trim();
+        if (raw.includes("|")) return "all";
+        return getFirstName(raw || activeVendorDetails?.mfg || vendorName) || vendorName;
+      })(),
       table: usesPdfFormat ? pdfTableText : tableText,
       poNumber,
       vendor: vendorName,
@@ -1150,13 +1176,10 @@ export default function InventoryPage() {
     const hasTablePlaceholder = /\{\{\s*table\s*\}\}/i.test(bodyTemplate);
     const htmlTemplate = hasTablePlaceholder
       ? rawHtmlTemplate.replace(`<p>${escapeHtml("{{table}}")}</p>`, htmlReplacements.table)
-      : `${rawHtmlTemplate}${usesPdfFormat ? pdfTableHtml : ""}`;
+      : `${rawHtmlTemplate}${usesPdfFormat ? "" : tableHtml}`;
     const bodyTextBase = replacePlaceholders(bodyTemplate, replacements);
     const bodyHtml = replacePlaceholders(htmlTemplate, htmlReplacements);
-    const bodyText =
-      usesPdfFormat && !hasTablePlaceholder
-        ? `${bodyTextBase}\n\n${pdfTableText}`
-        : bodyTextBase;
+    const bodyText = bodyTextBase;
 
     return {
       from: DEFAULT_EMAIL_FROM,
@@ -1178,10 +1201,12 @@ export default function InventoryPage() {
   ]);
 
   const sendPurchaseOrderEmail = async () => {
-    if (!emailPreview.to) {
+    const toAddress = editedEmailTo || emailPreview.to;
+
+    if (!toAddress) {
       setInventoryMessage({
         type: "error",
-        text: "Vendor email is missing. Add an email address in Vendor Details first.",
+        text: "Vendor email is missing. Add a recipient address first.",
       });
       return;
     }
@@ -1195,19 +1220,47 @@ export default function InventoryPage() {
         return;
       }
 
+      // For PDF vendors, generate PDF, upload to Supabase, and attach
+      let attachments: Array<{ filename: string; contentType: string; contentBase64: string }> = [];
+
+      if (emailPreview.usesPdfFormat) {
+        const doc = buildPurchaseOrderPdfDoc();
+
+        if (doc) {
+          const arrayBuffer = doc.output("arraybuffer");
+          const uint8Array = new Uint8Array(arrayBuffer);
+          const pdfBase64 = btoa(uint8Array.reduce((acc, byte) => acc + String.fromCharCode(byte), ""));
+
+          let filename = `${poNumber}.pdf`;
+          try {
+            const uploaded = await uploadPdfToSupabase(poNumber, pdfBase64);
+            filename = uploaded;
+          } catch {
+            // proceed with default filename if upload fails
+          }
+
+          attachments = [{ filename, contentType: "application/pdf", contentBase64: pdfBase64 }];
+        }
+      }
+
+      const bodyText = editedEmailBody || emailPreview.bodyText;
+      const bodyHtml = editedEmailBody
+        ? editedEmailBody.split("\n\n").map((b) => `<p>${b.replace(/\n/g, "<br/>")}</p>`).join("")
+        : emailPreview.bodyHtml;
+      const subject = editedEmailSubject || emailPreview.subject;
+
       const response = await fetch("/api/send-po-email", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           from: emailPreview.from,
-          to: emailPreview.to,
-          subject: emailPreview.subject,
-          html: emailPreview.bodyHtml,
-          text: emailPreview.bodyText,
+          to: toAddress,
+          subject,
+          html: bodyHtml,
+          text: bodyText,
           poNumber,
           vendor: activePoVendor,
+          attachments,
         }),
       });
       const data = await response.json();
@@ -1218,7 +1271,7 @@ export default function InventoryPage() {
 
       setInventoryMessage({
         type: "success",
-        text: `Sent ${emailPreview.subject} to ${emailPreview.to}.`,
+        text: `Sent ${subject} to ${toAddress}.`,
       });
       setEmailPreviewOpen(false);
     } catch (error) {
@@ -1796,7 +1849,12 @@ export default function InventoryPage() {
               )}
               <button
                 type="button"
-                onClick={() => setEmailPreviewOpen(true)}
+                onClick={() => {
+                  setEditedEmailTo(emailPreview.to);
+                  setEditedEmailSubject(emailPreview.subject);
+                  setEditedEmailBody(emailPreview.bodyText);
+                  setEmailPreviewOpen(true);
+                }}
                 disabled={poRows.length === 0}
                 className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -2120,38 +2178,44 @@ export default function InventoryPage() {
             </div>
             <div className="space-y-3 p-5 text-sm">
               <div>
-                <p className="text-xs font-semibold uppercase text-slate-500">
-                  From
-                </p>
-                <p className="mt-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <p className="text-xs font-semibold uppercase text-slate-500">From</p>
+                <p className="mt-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-500">
                   {emailPreview.from}
                 </p>
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase text-slate-500">
-                  To
-                </p>
-                <p className="mt-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  {emailPreview.to}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase text-slate-500">
-                  Subject
-                </p>
-                <p className="mt-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  {emailPreview.subject}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase text-slate-500">
-                  Body
-                </p>
-                <div
-                  className="mt-1 max-h-80 overflow-auto rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900"
-                  dangerouslySetInnerHTML={{ __html: emailPreview.bodyHtml }}
+                <p className="text-xs font-semibold uppercase text-slate-500">To</p>
+                <input
+                  type="text"
+                  value={editedEmailTo}
+                  onChange={(e) => setEditedEmailTo(e.target.value)}
+                  placeholder="recipient@example.com, another@example.com"
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
                 />
               </div>
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-500">Subject</p>
+                <input
+                  type="text"
+                  value={editedEmailSubject}
+                  onChange={(e) => setEditedEmailSubject(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+                />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-500">Body</p>
+                <textarea
+                  value={editedEmailBody}
+                  onChange={(e) => setEditedEmailBody(e.target.value)}
+                  rows={6}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 focus:border-slate-400 focus:outline-none"
+                />
+              </div>
+              {emailPreview.usesPdfFormat && (
+                <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                  The purchase order PDF will be generated and attached automatically.
+                </p>
+              )}
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
               <button
@@ -2164,7 +2228,7 @@ export default function InventoryPage() {
               <button
                 type="button"
                 onClick={() => void sendPurchaseOrderEmail()}
-                disabled={sendingEmail || !emailPreview.to}
+                disabled={sendingEmail || !editedEmailTo}
                 className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {sendingEmail ? "Sending..." : "Send Email"}
