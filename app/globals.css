@@ -97,6 +97,21 @@ a {
   padding: 2rem 2rem 1rem;
   background: white;
   box-shadow: 0 1px 0 rgb(226 232 240);
+  isolation: isolate;
+}
+
+.sticky-page-toolbar::before {
+  content: "";
+  position: absolute;
+  inset: -4rem 0 0;
+  z-index: 0;
+  background: white;
+  pointer-events: none;
+}
+
+.sticky-page-toolbar > * {
+  position: relative;
+  z-index: 1;
 }
 
 .sticky-table-header th {
