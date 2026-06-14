@@ -326,6 +326,21 @@ function getVendorEmailAddress(vendor: VendorRow | null) {
   return "";
 }
 
+function getOrderAtLabel(orderAt: string | undefined) {
+  const value = String(orderAt || "").trim();
+  const normalized = value.toLowerCase();
+
+  if (normalized.includes("website")) {
+    return "Website";
+  }
+
+  if (normalized.includes("email")) {
+    return "Via Email";
+  }
+
+  return value || "No details";
+}
+
 function normalizeVendorMatchKey(value: string) {
   return normalizeText(value)
     .replace(/^vidal\s*-\s*/, "")
@@ -1126,10 +1141,18 @@ export default function InventoryPage() {
 
     try {
       const filename = await uploadPdfToSupabase(pdfOrderPreview.poNumber, pdfBase64);
-      doc.save(`${filename.replace(/\.pdf$/, "")}.pdf`);
-    } catch {
-      // Still download even if upload fails
-      doc.save(`${pdfOrderPreview.poNumber}.pdf`);
+      setInventoryMessage({
+        type: "success",
+        text: `PDF saved to Supabase storage as ${filename}. It will be attached when you send the PO email.`,
+      });
+    } catch (error) {
+      setInventoryMessage({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Unable to save PDF to Supabase storage.",
+      });
     }
   };
 
@@ -2032,15 +2055,11 @@ export default function InventoryPage() {
               >
                 {activeVendorDetails?.order_at.toLowerCase().includes("website") ? (
                   <Globe size={14} />
-                ) : activeVendorUsesPdf ? (
-                  <FileText size={14} />
                 ) : (
                   <Mail size={14} />
                 )}
                 <span className="truncate">
-                  {activeVendorUsesPdf
-                    ? "PDF order"
-                    : activeVendorDetails?.order_at || "No details"}
+                  {getOrderAtLabel(activeVendorDetails?.order_at)}
                 </span>
               </button>
             </div>

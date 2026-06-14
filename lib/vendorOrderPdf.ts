@@ -258,19 +258,7 @@ function formatCurrency(value: number) {
 export function vendorUsesPdfFormat(
   settings: VendorPdfSettings | null | undefined
 ) {
-  if (!settings) {
-    return false;
-  }
-
-  if (settings.pdfEnabled) {
-    return true;
-  }
-
-  return (
-    settings.email?.attachmentFormat === "pdf" ||
-    (settings.email?.includeAttachment === true &&
-      settings.email?.attachmentFormat === "pdf")
-  );
+  return Boolean(settings?.pdfEnabled);
 }
 
 function findPdfSkuMapping(
