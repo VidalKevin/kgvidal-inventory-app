@@ -2220,16 +2220,38 @@ export default function InventoryPage() {
                             onFocus={() => beginApprovedQtyEdit(row)}
                             onClick={() => beginApprovedQtyEdit(row)}
                             onChange={(e) => setApprovedQty(row.sku, e.target.value.replace(/[^\d]/g, ""))}
-                            onBlur={() => {
-                              commitApprovedQty(row);
+                            onBlur={(event) => {
+                              commitApprovedQty(row, event.currentTarget.value);
                               setActiveApprovedSku(null);
                             }}
                             onKeyDown={(event) => {
                               if (event.key === "Enter") {
-                                commitApprovedQty(row);
+                                commitApprovedQty(row, event.currentTarget.value);
                                 event.currentTarget.blur();
+                                return;
+                              }
+
+                              if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+                                event.preventDefault();
+                                bumpQty(row, event.key === "ArrowRight" ? 1 : -1);
+                                return;
+                              }
+
+                              if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                                event.preventDefault();
+                                commitApprovedQty(row, event.currentTarget.value);
+                                const nextIndex =
+                                  index + (event.key === "ArrowDown" ? 1 : -1);
+                                window.requestAnimationFrame(() => {
+                                  const nextInput = document.querySelector<HTMLInputElement>(
+                                    `[data-approved-index="${nextIndex}"]`
+                                  );
+                                  nextInput?.focus();
+                                  nextInput?.select();
+                                });
                               }
                             }}
+                            data-approved-index={index}
                             placeholder=""
                             className="h-7 min-w-0 flex-1 border-0 bg-white px-1 text-center text-xs font-semibold outline-none"
                           />
