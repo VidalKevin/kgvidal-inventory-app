@@ -7,8 +7,6 @@ import {
   LayoutDashboard,
   Boxes,
   ClipboardList,
-  BarChart3,
-  Truck,
   CalendarDays,
   CalendarRange,
   Folder,
@@ -48,26 +46,22 @@ const menuItems: MenuItem[] = [
         icon: CalendarDays,
       },
       {
-        label: "Purchase Order",
+        label: "Fulfillment",
         href: "/purchase-orders",
         icon: ClipboardList,
       },
     ],
   },
+  { label: "Weekly Reports", href: "/reports/weekly", icon: CalendarDays },
+  { label: "Monthly Reports", href: "/reports/monthly", icon: CalendarRange },
   {
-    label: "Reports",
-    icon: BarChart3,
+    label: "Files",
+    icon: Folder,
     children: [
-      { label: "In-transit", href: "/reports/in-transit", icon: Truck },
       {
-        label: "Weekly Reports",
-        href: "/reports/weekly",
-        icon: CalendarDays,
-      },
-      {
-        label: "Monthly Reports",
-        href: "/reports/monthly",
-        icon: CalendarRange,
+        label: "Discontinued Items",
+        href: "/files/discontinued-items",
+        icon: FileX2,
       },
     ],
   },
@@ -84,18 +78,7 @@ const menuItems: MenuItem[] = [
     ],
   },
   {
-    label: "Files",
-    icon: Folder,
-    children: [
-      {
-        label: "Discontinued Items",
-        href: "/files/discontinued-items",
-        icon: FileX2,
-      },
-    ],
-  },
-  {
-    label: "Manage User",
+    label: "Manage Users",
     icon: UserCog,
     children: [
       {
@@ -114,10 +97,9 @@ export default function Sidebar() {
     Inventory:
       pathname.startsWith("/inventory") ||
       pathname.startsWith("/purchase-orders"),
-    Reports: pathname.startsWith("/reports"),
     Files: pathname.startsWith("/files"),
     Masters: pathname.startsWith("/masters"),
-    "Manage User": pathname.startsWith("/manage-user"),
+    "Manage Users": pathname.startsWith("/manage-user"),
   });
 
   const toggleMenu = (label: string) => {
