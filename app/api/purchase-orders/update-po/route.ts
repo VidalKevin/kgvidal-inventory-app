@@ -50,6 +50,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
     const rows = Array.isArray(body.rows) ? body.rows : [];
+    const originalPoNumber = String(body.originalPoNumber || body.poNumber || "").trim();
     const poNumber = String(body.poNumber || rows[0]?.po_number || "").trim();
 
     if (!poNumber) {
@@ -99,7 +100,7 @@ export async function PATCH(request: NextRequest) {
     const { error: deleteError } = await supabaseAdmin
       .from("purchase_orders")
       .delete()
-      .eq("po_number", poNumber);
+      .eq("po_number", originalPoNumber || poNumber);
 
     if (deleteError) {
       return NextResponse.json(

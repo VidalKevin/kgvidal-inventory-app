@@ -43,6 +43,7 @@ export default function PurchaseOrdersPage() {
   const [saving, setSaving] = useState(false);
   const [popupMessage, setPopupMessage] = useState("");
   const [selectedPo, setSelectedPo] = useState("");
+  const [editedPoNumber, setEditedPoNumber] = useState("");
   const [popupRows, setPopupRows] = useState<PurchaseOrderRow[]>([]);
   const [poStatus, setPoStatus] = useState("Pending");
 
@@ -97,6 +98,7 @@ export default function PurchaseOrdersPage() {
     const samePoRows = rows.filter((row) => row.po_number === poNumber);
 
     setSelectedPo(poNumber);
+    setEditedPoNumber(poNumber);
     setPopupRows(samePoRows);
     setPoStatus(samePoRows[0]?.status || "Pending");
     setPopupMessage("");
@@ -110,6 +112,7 @@ export default function PurchaseOrdersPage() {
     setSaving(false);
     setPopupMessage("");
     setSelectedPo("");
+    setEditedPoNumber("");
     setPopupRows([]);
   };
 
@@ -199,7 +202,7 @@ export default function PurchaseOrdersPage() {
         qty: 0,
         qty_received: 0,
         diff: 0,
-        po_number: selectedPo,
+        po_number: editedPoNumber || selectedPo,
         status: poStatus || "Pending",
       },
     ]);
@@ -214,6 +217,13 @@ export default function PurchaseOrdersPage() {
   };
 
   const savePopupRows = async () => {
+    const nextPoNumber = editedPoNumber.trim();
+
+    if (!nextPoNumber) {
+      setPopupMessage("PO # is required.");
+      return;
+    }
+
     for (const row of popupRows) {
       const qty = Number(row.qty || 0);
 
@@ -233,8 +243,12 @@ export default function PurchaseOrdersPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          poNumber: selectedPo,
-          rows: popupRows,
+          originalPoNumber: selectedPo,
+          poNumber: nextPoNumber,
+          rows: popupRows.map((row) => ({
+            ...row,
+            po_number: nextPoNumber,
+          })),
         }),
       });
 
@@ -246,6 +260,8 @@ export default function PurchaseOrdersPage() {
 
       setPopupMessage("Updated successfully");
       setPopupRows(data.purchaseOrders || []);
+      setSelectedPo(nextPoNumber);
+      setEditedPoNumber(nextPoNumber);
       await loadPurchaseOrders();
       setEditing(false);
     } catch (error) {
@@ -368,13 +384,13 @@ export default function PurchaseOrdersPage() {
 
       {popupOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-xl bg-white shadow-xl">
+          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-7xl flex-col overflow-hidden rounded-xl bg-white shadow-xl">
             <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-4">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">
                   Update Purchase Order
                 </h2>
-                <p className="text-xs text-slate-500">PO #: {selectedPo}</p>
+                <p className="text-xs text-slate-500">PO #: {editedPoNumber || selectedPo}</p>
               </div>
 
               <button
@@ -386,13 +402,18 @@ export default function PurchaseOrdersPage() {
               </button>
             </div>
 
-            <div className="space-y-4 overflow-y-auto p-4">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
               <div className="flex flex-wrap items-end gap-3">
                 <div>
                   <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">
                     PO #
                   </label>
-                  <input disabled value={selectedPo} className="input w-48" />
+                  <input
+                    disabled={!editing}
+                    value={editedPoNumber}
+                    onChange={(event) => setEditedPoNumber(event.target.value)}
+                    className="input w-64"
+                  />
                 </div>
 
                 <div>

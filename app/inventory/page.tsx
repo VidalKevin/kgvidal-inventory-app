@@ -424,6 +424,7 @@ export default function InventoryPage() {
   const [editedEmailTo, setEditedEmailTo] = useState("");
   const [editedEmailSubject, setEditedEmailSubject] = useState("");
   const [editedEmailBody, setEditedEmailBody] = useState("");
+  const [pdfFileByPoNumber, setPdfFileByPoNumber] = useState<Record<string, string>>({});
   const [columnFilters, setColumnFilters] = useState<Record<ColumnFilterKey, string>>({
     productTitle: "All",
     variantTitle: "All",
@@ -1141,6 +1142,10 @@ export default function InventoryPage() {
 
     try {
       const filename = await uploadPdfToSupabase(pdfOrderPreview.poNumber, pdfBase64);
+      setPdfFileByPoNumber((current) => ({
+        ...current,
+        [pdfOrderPreview.poNumber]: filename,
+      }));
       setInventoryMessage({
         type: "success",
         text: `PDF saved to Supabase storage as ${filename}. It will be attached when you send the PO email.`,
@@ -1404,6 +1409,10 @@ export default function InventoryPage() {
           try {
             const uploaded = await uploadPdfToSupabase(poNumber, pdfBase64);
             filename = uploaded;
+            setPdfFileByPoNumber((current) => ({
+              ...current,
+              [poNumber]: uploaded,
+            }));
           } catch {
             // proceed with default filename if upload fails
           }
@@ -2378,7 +2387,10 @@ export default function InventoryPage() {
               </div>
               {emailPreview.usesPdfFormat && (
                 <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                  The purchase order PDF will be generated and attached automatically.
+                  {pdfOrderPreview &&
+                  pdfFileByPoNumber[pdfOrderPreview.poNumber]
+                    ? `Attached PDF with reference PO# ${pdfOrderPreview.poNumber}.`
+                    : "No PDF on file."}
                 </p>
               )}
             </div>
