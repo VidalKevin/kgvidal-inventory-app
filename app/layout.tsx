@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
+import StickyTableSync from "@/components/StickyTableSync";
 
 export const metadata: Metadata = {
   title: "KG Inventory",
@@ -25,6 +26,7 @@ export default function RootLayout({
             <Header />
 
             <main className="min-h-0 flex-1 overflow-y-auto bg-white p-8">
+              <StickyTableSync />
               {children}
             </main>
           </section>
