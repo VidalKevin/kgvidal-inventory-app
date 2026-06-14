@@ -72,17 +72,18 @@ export default function UserAccessPage() {
 
   return (
     <section>
-      <PageTitle
-        title="User Access"
-        description="Manage user roles and access permissions for operational modules."
-      />
+      <div className="sticky-page-toolbar">
+        <PageTitle
+          title="User Access"
+          description="Manage user roles and access permissions for operational modules."
+        />
 
-      <article className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-base font-semibold text-slate-900">
-          {editingUser ? "Edit User Access" : "Add User Access"}
-        </h3>
+        <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-base font-semibold text-slate-900">
+            {editingUser ? "Edit User Access" : "Add User Access"}
+          </h3>
 
-        <form onSubmit={handleSubmit} className="mt-4 grid gap-4 md:grid-cols-2">
+          <form onSubmit={handleSubmit} className="mt-4 grid gap-4 md:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">
               Email
@@ -160,12 +161,13 @@ export default function UserAccessPage() {
               </button>
             )}
           </div>
-        </form>
-      </article>
+          </form>
+        </article>
+      </div>
 
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50">
+          <thead className="sticky-table-header bg-slate-50">
             <tr>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">User</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700">Role</th>

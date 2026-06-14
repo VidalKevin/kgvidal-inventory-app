@@ -1764,14 +1764,15 @@ export default function InventoryPage() {
         setActiveApprovedSku(null);
         setOpenDropdown(null);
       }}>
-      <PageTitle
-        title="Days of Inventory"
-        description="Track stock levels, forecasting, vendor distribution, and inventory health."
-      />
+      <div className="sticky-page-toolbar">
+        <PageTitle
+          title="Days of Inventory"
+          description="Track stock levels, forecasting, vendor distribution, and inventory health."
+        />
 
-      {/* Top Controls */}
-      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        {/* Top Controls */}
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="flex flex-wrap items-center justify-end gap-2">
           <div className="relative w-[20ch] shrink-0">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -1846,14 +1847,15 @@ export default function InventoryPage() {
             >
               <Download size={16} />
             </button>
-        </div>
-        {inventoryMessage && (
-          <div className={`mt-4 rounded-xl px-4 py-3 text-sm font-medium ${
-            inventoryMessage.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
-          }`}>
-            {inventoryMessage.text}
           </div>
-        )}
+          {inventoryMessage && (
+            <div className={`mt-4 rounded-xl px-4 py-3 text-sm font-medium ${
+              inventoryMessage.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+            }`}>
+              {inventoryMessage.text}
+            </div>
+          )}
+        </div>
       </div>
 
       {syncModalOpen && (
@@ -2076,7 +2078,7 @@ export default function InventoryPage() {
 
           <div className="overflow-x-auto">
             <table className="w-full table-fixed text-xs">
-              <thead className="bg-slate-100 text-slate-700">
+              <thead className="sticky-table-header bg-slate-100 text-slate-700">
                 <tr>
                   <th className="w-[240px] px-2.5 py-2 text-left font-semibold">
                     Product
@@ -2133,7 +2135,7 @@ export default function InventoryPage() {
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full table-fixed text-xs">
-            <thead className="bg-slate-100 text-slate-700">
+            <thead className="sticky-table-header bg-slate-100 text-slate-700">
               <tr>
                 {headers.map((h) => (
                   <th key={h.label} className={`${h.width} whitespace-nowrap px-2.5 py-2 text-left font-semibold ${h.align ?? ""}`}>

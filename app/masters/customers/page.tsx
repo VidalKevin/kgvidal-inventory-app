@@ -21,25 +21,27 @@ const customers = [
 export default function CustomersPage() {
   return (
     <section className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <PageTitle
-          title="Customers"
-          description="Track customer master data and communication points."
-        />
+      <div className="sticky-page-toolbar">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <PageTitle
+            title="Customers"
+            description="Track customer master data and communication points."
+          />
 
-        <button
-          type="button"
-          className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-        >
-          <Plus size={18} />
-          Add Customer
-        </button>
+          <button
+            type="button"
+            className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            <Plus size={18} />
+            Add Customer
+          </button>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-100 text-slate-700">
+            <thead className="sticky-table-header bg-slate-100 text-slate-700">
               <tr>
                 <th className="px-5 py-4 text-left font-semibold">
                   Customer Name

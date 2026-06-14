@@ -156,54 +156,56 @@ export default function ItemMasterListPage() {
 
   return (
     <section className="space-y-4">
-      <PageTitle
-        title="Item Master List"
-        description="Define core item data used throughout inventory and purchasing workflows."
-      />
+      <div className="sticky-page-toolbar">
+        <PageTitle
+          title="Item Master List"
+          description="Define core item data used throughout inventory and purchasing workflows."
+        />
 
-      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="relative w-full lg:max-w-sm">
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-            />
-            <input
-              type="text"
-              placeholder="Search product, SKU, vendor..."
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="h-9 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-xs text-slate-900 outline-none focus:border-slate-900"
-            />
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="relative w-full lg:max-w-sm">
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+              <input
+                type="text"
+                placeholder="Search product, SKU, vendor..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className="h-9 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-xs text-slate-900 outline-none focus:border-slate-900"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={openAddModal}
+              className="flex h-9 items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800"
+            >
+              <Plus size={14} />
+              Add Item
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={openAddModal}
-            className="flex h-9 items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800"
-          >
-            <Plus size={14} />
-            Add Item
-          </button>
+          {message && (
+            <div
+              className={`mt-3 rounded-lg px-3 py-2 text-xs font-medium ${
+                message.type === "success"
+                  ? "bg-green-50 text-green-700"
+                  : "bg-red-50 text-red-700"
+              }`}
+            >
+              {message.text}
+            </div>
+          )}
         </div>
-
-        {message && (
-          <div
-            className={`mt-3 rounded-lg px-3 py-2 text-xs font-medium ${
-              message.type === "success"
-                ? "bg-green-50 text-green-700"
-                : "bg-red-50 text-red-700"
-            }`}
-          >
-            {message.text}
-          </div>
-        )}
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full table-fixed text-xs">
-            <thead className="bg-slate-100 text-slate-700">
+            <thead className="sticky-table-header bg-slate-100 text-slate-700">
               <tr>
                 <th className="w-[270px] px-2.5 py-2 text-left font-semibold">
                   Product title

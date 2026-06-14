@@ -275,37 +275,39 @@ export default function PurchaseOrdersPage() {
 
   return (
     <section className="space-y-4">
-      <PageTitle
-        title="Purchase Orders"
-        description="Track purchase orders, receiving quantities, differences, and status."
-      />
+      <div className="sticky-page-toolbar">
+        <PageTitle
+          title="Purchase Orders"
+          description="Track purchase orders, receiving quantities, differences, and status."
+        />
 
-      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="relative max-w-sm">
-          <Search
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-          />
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="relative max-w-sm">
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            />
 
-          <input
-            placeholder="Search PO, vendor, product, SKU..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="h-9 w-full rounded-lg border border-slate-300 pl-9 pr-3 text-xs outline-none focus:border-slate-900"
-          />
-        </div>
-
-        {errorMessage && (
-          <div className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
-            {errorMessage}
+            <input
+              placeholder="Search PO, vendor, product, SKU..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="h-9 w-full rounded-lg border border-slate-300 pl-9 pr-3 text-xs outline-none focus:border-slate-900"
+            />
           </div>
-        )}
+
+          {errorMessage && (
+            <div className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+              {errorMessage}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1250px] text-xs">
-            <thead className="bg-slate-100 text-slate-700">
+            <thead className="sticky-table-header bg-slate-100 text-slate-700">
               <tr>
                 <th className="px-3 py-2 text-left">Date</th>
                 <th className="px-3 py-2 text-left">Vendor</th>
