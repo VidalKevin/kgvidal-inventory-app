@@ -6,6 +6,7 @@ import {
   fetchPd90DaySalesBySku,
   fetchForecastMasterData,
   fetchShipheroOnOrderBySku,
+  getBusinessDateString,
   mergeSalesBySku,
 } from "@/lib/inventoryForecast";
 
@@ -417,7 +418,7 @@ async function runShopifyInventorySync(origin: string) {
 
     const supabaseAdmin = getSupabaseAdmin(env);
     const accessToken = await getShopifyAccessToken(env);
-    const snapshotDate = new Date().toISOString().slice(0, 10);
+    const snapshotDate = getBusinessDateString();
     const discontinuedSkus = await getDiscontinuedSkus(supabaseAdmin);
     const rows = await getInventoryRows(
       env,
@@ -452,7 +453,9 @@ async function runShopifyInventorySync(origin: string) {
       snapshotDate
     );
     const salesBySku = mergeSalesBySku(shopifySalesBySku, pdSalesBySku);
-    const onOrderBySku = await fetchShipheroOnOrderBySku(supabaseAdmin);
+    const onOrderBySku = await fetchShipheroOnOrderBySku(supabaseAdmin, {
+      freshForDate: snapshotDate,
+    });
     const { vendorByName, itemBySku } =
       await fetchForecastMasterData(supabaseAdmin);
     const forecastRows = buildInventoryForecastRows(

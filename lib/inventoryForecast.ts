@@ -31,6 +31,7 @@ type Pd90DaySaleRow = {
 type ShipheroIntransitRow = {
   sku: string | null;
   quantity: number | null;
+  synced_at?: string | null;
 };
 
 export type InventoryForecastDbRow = {
@@ -77,6 +78,33 @@ export type InventoryForecastClientRow = {
 
 function normalizeKey(value: string) {
   return value.trim().toLowerCase();
+}
+
+export const BUSINESS_TIME_ZONE = "America/New_York";
+
+export function getBusinessDateString(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    return date.toISOString().slice(0, 10);
+  }
+
+  return `${year}-${month}-${day}`;
+}
+
+export function getBusinessDateDaysAgo(days: number) {
+  const date = new Date(`${getBusinessDateString()}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() - days);
+
+  return date.toISOString().slice(0, 10);
 }
 
 function getPdWeekStart(snapshotDate: string) {
@@ -257,10 +285,13 @@ export async function fetchPd90DaySalesBySku(
   return salesBySku;
 }
 
-export async function fetchShipheroOnOrderBySku(supabaseAdmin: SupabaseClient) {
+export async function fetchShipheroOnOrderBySku(
+  supabaseAdmin: SupabaseClient,
+  options: { freshForDate?: string | null } = {}
+) {
   const { data, error } = await supabaseAdmin
     .from("shiphero_intransit_items")
-    .select("sku, quantity");
+    .select("sku, quantity, synced_at");
   const onOrderBySku = new Map<string, number>();
 
   if (error) {
@@ -275,7 +306,21 @@ export async function fetchShipheroOnOrderBySku(supabaseAdmin: SupabaseClient) {
     throw new Error(`Supabase Shiphero in-transit fetch failed: ${error.message}`);
   }
 
-  for (const row of (data ?? []) as ShipheroIntransitRow[]) {
+  const rows = (data ?? []) as ShipheroIntransitRow[];
+
+  if (
+    options.freshForDate &&
+    rows.length > 0 &&
+    !rows.some(
+      (row) =>
+        row.synced_at &&
+        getBusinessDateString(new Date(row.synced_at)) === options.freshForDate
+    )
+  ) {
+    return onOrderBySku;
+  }
+
+  for (const row of rows) {
     const skuKey = normalizeKey(String(row.sku ?? ""));
 
     if (!skuKey) {

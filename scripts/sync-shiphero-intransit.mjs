@@ -110,6 +110,8 @@ async function extractIntransitTotals(page) {
     const skuIndex = headers.indexOf("SKU");
     const quantityIndex = headers.indexOf("Quantity");
     const receivedIndex = headers.indexOf("Quantity Received");
+    const lineStatusIndex = headers.indexOf("Line Item Status");
+    const poStatusIndex = headers.indexOf("Purchase Order Status");
 
     if (skuIndex < 0 || quantityIndex < 0 || receivedIndex < 0) {
       throw new Error("Could not find SKU, Quantity, or Quantity Received columns.");
@@ -129,8 +131,19 @@ async function extractIntransitTotals(page) {
       const sku = row[skuIndex];
       const quantity = Number(String(row[quantityIndex] ?? "0").replace(/,/g, ""));
       const received = Number(String(row[receivedIndex] ?? "0").replace(/,/g, ""));
+      const lineStatus = String(row[lineStatusIndex] ?? "").trim().toLowerCase();
+      const poStatus = String(row[poStatusIndex] ?? "").trim().toLowerCase();
+      const closedLineStatuses = new Set(["received", "cancelled", "canceled", "closed"]);
 
       if (!sku || received !== 0) {
+        continue;
+      }
+
+      if (poStatusIndex >= 0 && poStatus !== "pending") {
+        continue;
+      }
+
+      if (lineStatusIndex >= 0 && closedLineStatuses.has(lineStatus)) {
         continue;
       }
 
@@ -234,4 +247,3 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 });
-

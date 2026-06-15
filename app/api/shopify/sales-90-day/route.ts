@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { getBusinessDateDaysAgo, getBusinessDateString } from "@/lib/inventoryForecast";
 
 export const runtime = "nodejs";
 
@@ -188,9 +189,7 @@ async function shopifyGraphQL<T>(
 }
 
 function getDateDaysAgo(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return date.toISOString().slice(0, 10);
+  return getBusinessDateDaysAgo(days);
 }
 
 function shouldCountLineItem(
@@ -251,7 +250,7 @@ async function getSalesSummaries(env: EnvMap, accessToken: string) {
 
   return {
     sinceDate,
-    throughDate: new Date().toISOString().slice(0, 10),
+    throughDate: getBusinessDateString(),
     orderCount,
     sales,
   };

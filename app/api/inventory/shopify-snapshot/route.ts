@@ -277,7 +277,9 @@ export async function GET(request: Request) {
       snapshotDate
     );
     const salesBySku = mergeSalesBySku(shopifySalesBySku, pdSalesBySku);
-    const onOrderBySku = await fetchShipheroOnOrderBySku(supabaseAdmin);
+    const onOrderBySku = await fetchShipheroOnOrderBySku(supabaseAdmin, {
+      freshForDate: snapshotDate,
+    });
     const { vendorByName, itemBySku } =
       await fetchForecastMasterData(supabaseAdmin);
     const forecastRows = buildInventoryForecastRows(
