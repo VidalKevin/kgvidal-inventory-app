@@ -37,7 +37,8 @@ export async function GET() {
 }
 
 export async function POST() {
-  const scriptPath = path.join(process.cwd(), "scripts", "sync-shiphero-onhold.mjs");
+  // Build path at runtime using array join so Turbopack won't treat it as a static module import
+  const scriptPath = path.join(process.cwd(), ...["scripts", "sync-shiphero-onhold.mjs"]);
 
   return new Promise<NextResponse>((resolve) => {
     const child = spawn("node", [scriptPath], {
