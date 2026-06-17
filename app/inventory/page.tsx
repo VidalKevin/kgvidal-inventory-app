@@ -138,7 +138,7 @@ type SyncScheduleResponse = {
 
 type ApprovedSaveState = "idle" | "saving" | "saved" | "error";
 
-const DEFAULT_EMAIL_FROM = "Kevin Galang <kevin@vidalcoaching.com>";
+const DEFAULT_EMAIL_FROM = "Sample Admin <admin@kg-erp-demo.com>";
 const DEFAULT_EMAIL_COLUMNS: VendorTableColumn[] = [
   { header: "Product Title", field: "Product Title" },
   { header: "Variant", field: "Variant" },
@@ -1148,7 +1148,7 @@ export default function InventoryPage() {
       }));
       setInventoryMessage({
         type: "success",
-        text: `PDF saved to Supabase storage as ${filename}. It will be attached when you send the PO email.`,
+        text: `PDF generated as ${filename}. It will be attached when you send the PO email.`,
       });
     } catch (error) {
       setInventoryMessage({
@@ -1156,7 +1156,7 @@ export default function InventoryPage() {
         text:
           error instanceof Error
             ? error.message
-            : "Unable to save PDF to Supabase storage.",
+            : "Unable to generate PDF.",
       });
     }
   };
@@ -1538,7 +1538,7 @@ export default function InventoryPage() {
       setSyncModalOpen(false);
       setInventoryMessage({
         type: "success",
-        text: "Shopify sync schedule saved to Supabase. The automated caller will run it when the deployed scheduler is configured.",
+        text: "Sync schedule saved successfully.",
       });
     } catch (error) {
       const message =
@@ -1810,7 +1810,7 @@ export default function InventoryPage() {
               className="flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RefreshCw size={14} className={syncingShopify ? "animate-spin" : ""} />
-              {syncingShopify ? "Syncing..." : "Sync Shopify"}
+              {syncingShopify ? "Syncing..." : "Sync Inventory"}
             </button>
 
             <button
@@ -1862,7 +1862,7 @@ export default function InventoryPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-              <h2 className="text-lg font-semibold text-slate-900">Shopify Sync</h2>
+              <h2 className="text-lg font-semibold text-slate-900">Inventory Sync</h2>
               <button type="button" onClick={() => setSyncModalOpen(false)} className="rounded-lg p-2 hover:bg-slate-100">
                 <X size={20} />
               </button>
@@ -2171,7 +2171,7 @@ export default function InventoryPage() {
             <tbody>
               {loadingInventory && (
                 <tr>
-                  <td colSpan={headers.length} className="px-5 py-8 text-center text-sm text-slate-500">Loading Shopify inventory...</td>
+                  <td colSpan={headers.length} className="px-5 py-8 text-center text-sm text-slate-500">Loading inventory...</td>
                 </tr>
               )}
               {!loadingInventory && sortedRows.map((row, index) => {

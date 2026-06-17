@@ -5,8 +5,8 @@ import Header from "@/components/Header";
 import StickyTableSync from "@/components/StickyTableSync";
 
 export const metadata: Metadata = {
-  title: "KG Inventory",
-  description: "Inventory Management App",
+  title: "KG ERP System",
+  description: "KG ERP System – Inventory Management Portal",
 };
 
 export default function RootLayout({

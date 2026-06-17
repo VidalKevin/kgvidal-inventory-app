@@ -262,7 +262,7 @@ export default function VendorsPage() {
   const openMissingIdMessage = () => {
     setMessage({
       type: "error",
-      text: "This vendor is missing an ID. Make sure app/api/vendor-list/route.ts selects id from Supabase.",
+      text: "This vendor is missing an ID.",
     });
   };
 
