@@ -4,7 +4,7 @@ export default function Header() {
       <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">
-            KG ERP SYSTEM
+            Inventory Management
           </h2>
         </div>
         <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-600">

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
 import path from "node:path";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getSupabaseAdminFromEnv, type EnvMap } from "@/lib/supabaseEnv";
@@ -16,16 +15,6 @@ async function getEnvMap(): Promise<EnvMap> {
   }
 }
 
-function isMissingTableError(message: string) {
-  const lowerMessage = message.toLowerCase();
-
-  return (
-    lowerMessage.includes("schema cache") ||
-    lowerMessage.includes("does not exist") ||
-    lowerMessage.includes("could not find the table")
-  );
-}
-
 export async function GET() {
   try {
     const env = await getEnvMap();
@@ -35,22 +24,10 @@ export async function GET() {
       .select("*")
       .order("order_date", { ascending: false });
 
-    if (error) {
-      if (isMissingTableError(error.message)) {
-        return NextResponse.json({
-          orders: [],
-          syncedAt: null,
-          note: "Create the shiphero_onhold_orders table in Supabase before syncing.",
-        });
-      }
-
-      throw new Error(error.message);
-    }
+    if (error) throw new Error(error.message);
 
     const syncedAt =
-      data && data.length > 0
-        ? (data[0] as { synced_at?: string }).synced_at ?? null
-        : null;
+      data && data.length > 0 ? (data[0] as { synced_at?: string }).synced_at ?? null : null;
 
     return NextResponse.json({ orders: data ?? [], syncedAt });
   } catch (error) {
@@ -64,18 +41,6 @@ export async function POST() {
     /* turbopackIgnore: true */ process.cwd(),
     ...["scripts", "sync-shiphero-onhold.mjs"]
   );
-
-  if (process.env.VERCEL || !existsSync(scriptPath)) {
-    return NextResponse.json(
-      {
-        error:
-          "ShipHero browser sync needs a Playwright worker with the saved ShipHero login session.",
-        details:
-          "Run `npm run sync:shiphero-onhold` from the project folder or configure a hosted Playwright worker. The app will read the saved Supabase data after the worker finishes.",
-      },
-      { status: 400 }
-    );
-  }
 
   return new Promise<NextResponse>((resolve) => {
     const child = spawn("node", [scriptPath], {

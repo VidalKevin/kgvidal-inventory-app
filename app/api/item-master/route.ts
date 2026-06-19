@@ -1,57 +1,129 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 
-type ItemMasterRow = {
-  id: string;
-  product_title: string;
-  product_variant_title: string;
-  product_variant_sku: string;
-  product_vendor: string;
-  uom: string;
+export const runtime = "nodejs";
+
+type EnvMap = Record<string, string | undefined>;
+
+type ItemMasterPayload = {
+  product_title?: string;
+  product_variant_title?: string;
+  product_variant_sku?: string;
+  product_vendor?: string;
+  uom?: string;
 };
 
-const mockItems: ItemMasterRow[] = [
-  { id: "item-1",  product_title: "Protein Powder",         product_variant_title: "Chocolate",      product_variant_sku: "ALPHA-001", product_vendor: "Alpha Nutrition",   uom: "1" },
-  { id: "item-2",  product_title: "Protein Powder",         product_variant_title: "Vanilla",         product_variant_sku: "ALPHA-002", product_vendor: "Alpha Nutrition",   uom: "1" },
-  { id: "item-3",  product_title: "Vitamin C 1000mg",       product_variant_title: "Default Title",   product_variant_sku: "ALPHA-003", product_vendor: "Alpha Nutrition",   uom: "1" },
-  { id: "item-4",  product_title: "Omega-3 Fish Oil",       product_variant_title: "180ct",           product_variant_sku: "BCLAB-001", product_vendor: "BioCore Labs",      uom: "1" },
-  { id: "item-5",  product_title: "Magnesium Glycinate",    product_variant_title: "120ct",           product_variant_sku: "BCLAB-002", product_vendor: "BioCore Labs",      uom: "1" },
-  { id: "item-6",  product_title: "Zinc Plus",              product_variant_title: "90ct",            product_variant_sku: "BCLAB-003", product_vendor: "BioCore Labs",      uom: "1" },
-  { id: "item-7",  product_title: "Collagen Peptides",      product_variant_title: "Unflavored",      product_variant_sku: "SMTH-001",  product_vendor: "Summit Health Co",  uom: "1" },
-  { id: "item-8",  product_title: "Probiotic Complex",      product_variant_title: "60cap",           product_variant_sku: "SMTH-002",  product_vendor: "Summit Health Co",  uom: "1" },
-  { id: "item-9",  product_title: "Elderberry Extract",     product_variant_title: "120ml",           product_variant_sku: "SMTH-003",  product_vendor: "Summit Health Co",  uom: "1" },
-  { id: "item-10", product_title: "Pre-Workout Energy",     product_variant_title: "Blue Raspberry",  product_variant_sku: "PEAK-001",  product_vendor: "PeakForm Supplies", uom: "1" },
-  { id: "item-11", product_title: "BCAA Recovery",          product_variant_title: "Fruit Punch",     product_variant_sku: "PEAK-002",  product_vendor: "PeakForm Supplies", uom: "1" },
-  { id: "item-12", product_title: "Creatine Monohydrate",   product_variant_title: "Unflavored",      product_variant_sku: "PEAK-003",  product_vendor: "PeakForm Supplies", uom: "1" },
-  { id: "item-13", product_title: "Vitamin D3 5000IU",      product_variant_title: "Softgels",        product_variant_sku: "NOVA-001",  product_vendor: "NovaPharma Inc",    uom: "1" },
-  { id: "item-14", product_title: "B-Complex Advanced",     product_variant_title: "90cap",           product_variant_sku: "NOVA-002",  product_vendor: "NovaPharma Inc",    uom: "1" },
-  { id: "item-15", product_title: "Sleep Support Melatonin",product_variant_title: "60ct",            product_variant_sku: "NOVA-003",  product_vendor: "NovaPharma Inc",    uom: "1" },
-];
+async function getEnvMap(): Promise<EnvMap> {
+  try {
+    const context = await getCloudflareContext({ async: true });
+    return {
+      ...process.env,
+      ...(context.env as EnvMap),
+    };
+  } catch {
+    return process.env;
+  }
+}
 
-const addedItems: ItemMasterRow[] = [];
+function getSupabaseAdmin(env: EnvMap) {
+  const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL");
+  }
+
+  if (!serviceRoleKey) {
+    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+}
+
+function requireText(payload: ItemMasterPayload, key: keyof ItemMasterPayload) {
+  const value = payload[key]?.trim();
+
+  if (!value) {
+    throw new Error(`Missing ${key}`);
+  }
+
+  return value;
+}
 
 export async function GET() {
-  const all = [...mockItems, ...addedItems].sort((a, b) =>
-    a.product_title.localeCompare(b.product_title)
-  );
-  return NextResponse.json({ items: all });
+  try {
+    const env = await getEnvMap();
+    const supabaseAdmin = getSupabaseAdmin(env);
+    const { data, error } = await supabaseAdmin
+      .from("item_master_list")
+      .select(
+        "id, product_title, product_variant_title, product_variant_sku, product_vendor, uom"
+      )
+      .order("product_title", { ascending: true });
+
+    if (error) {
+      throw new Error(`Supabase item fetch failed: ${error.message}`);
+    }
+
+    return NextResponse.json({
+      items: data ?? [],
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown item master fetch error";
+
+    return NextResponse.json(
+      {
+        error: message,
+        items: [],
+      },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(request: Request) {
   try {
-    const payload = (await request.json()) as Partial<ItemMasterRow>;
-    const row: ItemMasterRow = {
-      id: `item-new-${Date.now()}`,
-      product_title: payload.product_title?.trim() ?? "",
-      product_variant_title: payload.product_variant_title?.trim() ?? "",
-      product_variant_sku: payload.product_variant_sku?.trim() ?? "",
-      product_vendor: payload.product_vendor?.trim() ?? "",
-      uom: payload.uom?.trim() ?? "1",
+    const payload = (await request.json()) as ItemMasterPayload;
+    const row = {
+      product_title: requireText(payload, "product_title"),
+      product_variant_title: requireText(payload, "product_variant_title"),
+      product_variant_sku: requireText(payload, "product_variant_sku"),
+      product_vendor: requireText(payload, "product_vendor"),
+      uom: requireText(payload, "uom"),
     };
-    addedItems.push(row);
-    return NextResponse.json({ item: row });
+
+    const env = await getEnvMap();
+    const supabaseAdmin = getSupabaseAdmin(env);
+    const { data, error } = await supabaseAdmin
+      .from("item_master_list")
+      .insert(row)
+      .select(
+        "id, product_title, product_variant_title, product_variant_sku, product_vendor, uom"
+      )
+      .single();
+
+    if (error) {
+      throw new Error(`Supabase item insert failed: ${error.message}`);
+    }
+
+    return NextResponse.json({
+      item: data,
+    });
   } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown item master insert error";
+
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unable to add item." },
+      {
+        error: message,
+      },
       { status: 400 }
     );
   }

@@ -12,7 +12,7 @@ type UserEntry = {
 
 const initialUsers: UserEntry[] = [
   {
-    user: "admin@kg-erp-demo.com",
+    user: "kevin@vidalcoaching.com",
     role: "Admin",
     accessLevel: "Full Access",
     status: "Active",

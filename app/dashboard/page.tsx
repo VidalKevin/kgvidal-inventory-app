@@ -1,10 +1,10 @@
 import PageTitle from "@/components/PageTitle";
 
 const summaryCards = [
-  { label: "Total Inventory Items", value: "15" },
-  { label: "Low Stock Items", value: "6" },
-  { label: "Open Purchase Orders", value: "2" },
-  { label: "In-transit Orders", value: "3" },
+  { label: "Total Inventory Items", value: "1,284" },
+  { label: "Low Stock Items", value: "37" },
+  { label: "Open Purchase Orders", value: "12" },
+  { label: "In-transit Orders", value: "9" },
 ];
 
 export default function DashboardPage() {
