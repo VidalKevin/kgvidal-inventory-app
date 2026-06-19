@@ -1,41 +1,119 @@
 import { NextResponse } from "next/server";
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { getSupabaseAdminFromEnv, type EnvMap } from "@/lib/supabaseEnv";
 
 export const runtime = "nodejs";
 
-const mockOnHoldOrders = [
-  {
-    id: 1001,
-    order_date: "2026-06-15",
-    order_number: "#10042",
-    first_name: "Alex",
-    email: "customer1@sample-email.com",
-    on_hold: "Payment Review",
-    synced_at: "2026-06-17T08:00:00Z",
-  },
-  {
-    id: 1002,
-    order_date: "2026-06-16",
-    order_number: "#10058",
-    first_name: "Jordan",
-    email: "customer2@sample-email.com",
-    on_hold: "Address Verification",
-    synced_at: "2026-06-17T08:00:00Z",
-  },
-  {
-    id: 1003,
-    order_date: "2026-06-17",
-    order_number: "#10071",
-    first_name: "Morgan",
-    email: "customer3@sample-email.com",
-    on_hold: "Fraud Review",
-    synced_at: "2026-06-17T08:00:00Z",
-  },
-];
+async function getEnvMap(): Promise<EnvMap> {
+  try {
+    const context = await getCloudflareContext({ async: true });
+    return { ...process.env, ...(context.env as EnvMap) };
+  } catch {
+    return process.env;
+  }
+}
+
+function isMissingTableError(message: string) {
+  const lowerMessage = message.toLowerCase();
+
+  return (
+    lowerMessage.includes("schema cache") ||
+    lowerMessage.includes("does not exist") ||
+    lowerMessage.includes("could not find the table")
+  );
+}
 
 export async function GET() {
-  return NextResponse.json({
-    orders: mockOnHoldOrders,
-    syncedAt: "2026-06-17T08:00:00Z",
-    note: "Demo mode.",
+  try {
+    const env = await getEnvMap();
+    const supabaseAdmin = getSupabaseAdminFromEnv(env);
+    const { data, error } = await supabaseAdmin
+      .from("shiphero_onhold_orders")
+      .select("*")
+      .order("order_date", { ascending: false });
+
+    if (error) {
+      if (isMissingTableError(error.message)) {
+        return NextResponse.json({
+          orders: [],
+          syncedAt: null,
+          note: "Create the shiphero_onhold_orders table in Supabase before syncing.",
+        });
+      }
+
+      throw new Error(error.message);
+    }
+
+    const syncedAt =
+      data && data.length > 0
+        ? (data[0] as { synced_at?: string }).synced_at ?? null
+        : null;
+
+    return NextResponse.json({ orders: data ?? [], syncedAt });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function POST() {
+  const scriptPath = path.join(
+    /* turbopackIgnore: true */ process.cwd(),
+    ...["scripts", "sync-shiphero-onhold.mjs"]
+  );
+
+  if (process.env.VERCEL || !existsSync(scriptPath)) {
+    return NextResponse.json(
+      {
+        error:
+          "ShipHero browser sync must run locally because it needs Playwright and your saved ShipHero login session.",
+        details:
+          "Open the app on localhost and click Sync now, or run `npm run sync:shiphero-onhold` from the project folder.",
+      },
+      { status: 400 }
+    );
+  }
+
+  return new Promise<NextResponse>((resolve) => {
+    const child = spawn("node", [scriptPath], {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: process.env,
+    });
+
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+
+    child.stdout?.on("data", (chunk: Buffer) => stdout.push(chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk.toString()));
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve(NextResponse.json({ success: true, output: stdout.join("") }));
+      } else {
+        resolve(
+          NextResponse.json(
+            {
+              error: "Sync script failed.",
+              details: stderr.join("") || stdout.join(""),
+            },
+            { status: 500 }
+          )
+        );
+      }
+    });
+
+    child.on("error", (err) => {
+      resolve(
+        NextResponse.json(
+          {
+            error: `Failed to start sync: ${err.message}. Make sure Playwright is installed and you are running locally.`,
+          },
+          { status: 500 }
+        )
+      );
+    });
   });
 }
