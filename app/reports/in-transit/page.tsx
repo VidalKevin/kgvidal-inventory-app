@@ -182,7 +182,7 @@ export default function FulfillmentPage() {
     } catch {
       setSyncMessage({
         type: "error",
-        text: "Sync failed. Make sure this is running locally with Playwright installed.",
+        text: "Sync failed. Make sure the ShipHero Playwright worker is available and the saved ShipHero session is still logged in.",
       });
     } finally {
       setSyncing(false);
@@ -337,8 +337,8 @@ export default function FulfillmentPage() {
 
             <div className="space-y-5 p-6">
               <p className="text-sm text-slate-500">
-                Sync now opens a local browser window to log in to ShipHero and
-                pull Orders, Manage Orders, Last 30 days, Unfulfilled, Any Hold.
+                Sync now runs the ShipHero automation in the background, saves
+                the latest on-hold orders to Supabase, then refreshes this list.
               </p>
 
               <div className="grid grid-cols-2 gap-3">

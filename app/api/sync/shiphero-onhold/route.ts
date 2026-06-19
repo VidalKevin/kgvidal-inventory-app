@@ -69,9 +69,9 @@ export async function POST() {
     return NextResponse.json(
       {
         error:
-          "ShipHero browser sync must run locally because it needs Playwright and your saved ShipHero login session.",
+          "ShipHero browser sync needs a Playwright worker with the saved ShipHero login session.",
         details:
-          "Open the app on localhost and click Sync now, or run `npm run sync:shiphero-onhold` from the project folder.",
+          "Run `npm run sync:shiphero-onhold` from the project folder or configure a hosted Playwright worker. The app will read the saved Supabase data after the worker finishes.",
       },
       { status: 400 }
     );

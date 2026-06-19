@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 const sessionDir = path.join(projectRoot, ".shiphero-session");
+const headless = process.env.SHIPHERO_HEADLESS !== "0";
 
 function loadEnvFile(filePath) {
   if (!existsSync(filePath)) {
@@ -107,6 +108,12 @@ async function waitForShipheroLogin(page) {
 
   if (page.url().includes("app.shiphero.com/dashboard/orders")) {
     return;
+  }
+
+  if (headless) {
+    throw new Error(
+      "ShipHero login session expired. Run `$env:SHIPHERO_HEADLESS='0'; npm run sync:shiphero-onhold` once to log in, then rerun the sync."
+    );
   }
 
   console.log("Log in to ShipHero in the browser window if prompted.");
@@ -304,7 +311,7 @@ async function main() {
   await mkdir(sessionDir, { recursive: true });
 
   const browser = await chromium.launchPersistentContext(sessionDir, {
-    headless: false,
+    headless,
     acceptDownloads: true,
   });
   const page = browser.pages()[0] ?? (await browser.newPage());
