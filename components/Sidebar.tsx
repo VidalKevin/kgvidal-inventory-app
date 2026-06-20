@@ -12,6 +12,7 @@ import {
   Folder,
   FileX2,
   PackageCheck,
+  FileBarChart,
   BookOpen,
   Building2,
   PackageSearch,
@@ -53,8 +54,18 @@ const menuItems: MenuItem[] = [
       },
     ],
   },
-  { label: "Fulfillment", href: "/reports/in-transit", icon: PackageCheck },
-  { label: "Weekly Reports", href: "/reports/weekly", icon: CalendarDays },
+  { label: "Fulfillment", href: "/fulfillment", icon: PackageCheck },
+  {
+    label: "Weekly Reports",
+    icon: CalendarDays,
+    children: [
+      {
+        label: "Executive Summary Report",
+        href: "/reports/weekly/executive-summary",
+        icon: FileBarChart,
+      },
+    ],
+  },
   { label: "Monthly Reports", href: "/reports/monthly", icon: CalendarRange },
   {
     label: "Files",
@@ -99,6 +110,7 @@ export default function Sidebar() {
     Inventory:
       pathname.startsWith("/inventory") ||
       pathname.startsWith("/purchase-orders"),
+    "Weekly Reports": pathname.startsWith("/reports/weekly"),
     Files: pathname.startsWith("/files"),
     Masters: pathname.startsWith("/masters"),
     "Manage Users": pathname.startsWith("/manage-user"),
