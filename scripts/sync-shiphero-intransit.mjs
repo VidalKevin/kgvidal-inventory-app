@@ -87,6 +87,12 @@ async function waitForShipheroLogin(page) {
     return;
   }
 
+  if (process.env.SHIPHERO_HEADLESS === "true") {
+    throw new Error(
+      "ShipHero session is not logged in. Run `npm run sync:shiphero-intransit` once from PowerShell to refresh the saved login session."
+    );
+  }
+
   console.log("Log in to Shiphero in the browser window if prompted.");
   await page.waitForURL("**/dashboard/purchase-order-line-items**", {
     timeout: 5 * 60 * 1000,
@@ -208,7 +214,7 @@ async function main() {
   await mkdir(sessionDir, { recursive: true });
 
   const browser = await chromium.launchPersistentContext(sessionDir, {
-    headless: false,
+    headless: process.env.SHIPHERO_HEADLESS === "true",
     acceptDownloads: true,
   });
   const page = browser.pages()[0] ?? (await browser.newPage());

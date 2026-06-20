@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { promisify } from "node:util";
 import { createClient } from "@supabase/supabase-js";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import {
@@ -101,6 +105,7 @@ const SHOPIFY_VARIANT_QUERY =
   'product_status:active AND (product_type:Nutraceutical OR product_type:Nutraceuticals OR product_type:"Lab Test Public")';
 const EXCLUDED_VENDORS = new Set(["labcorp", "nutrition dynamic"]);
 const EXCLUDED_VARIANT_TITLES = new Set(["with review", "no review"]);
+const execFileAsync = promisify(execFile);
 
 const INVENTORY_QUERY = `
   query InventorySync($cursor: String, $query: String!) {
@@ -412,8 +417,59 @@ async function insertSnapshotRows(
   };
 }
 
+async function refreshShipheroIntransit() {
+  const scriptPath = path.join(
+    process.cwd(),
+    "scripts",
+    "sync-shiphero-intransit.mjs"
+  );
+
+  if (!existsSync(scriptPath)) {
+    throw new Error(`ShipHero sync script not found at ${scriptPath}`);
+  }
+
+  async function runScript(headless: boolean) {
+    const timeout = Number(
+      process.env.SHIPHERO_SYNC_TIMEOUT_MS ?? 6 * 60 * 1000
+    );
+    const { stdout, stderr } = await execFileAsync(
+      process.execPath,
+      [scriptPath],
+      {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          SHIPHERO_HEADLESS: headless ? "true" : "false",
+        },
+        maxBuffer: 1024 * 1024 * 5,
+        timeout,
+      }
+    );
+
+    return {
+      mode: headless ? "headless" : "visible",
+      stdout: stdout.trim(),
+      stderr: stderr.trim(),
+    };
+  }
+
+  try {
+    return await runScript(true);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : String(error ?? "");
+
+    if (!message.includes("ShipHero session is not logged in")) {
+      throw error;
+    }
+
+    return await runScript(false);
+  }
+}
+
 async function runShopifyInventorySync(origin: string) {
   try {
+    const shipheroSync = await refreshShipheroIntransit();
     const env = await getEnvMap();
 
     const supabaseAdmin = getSupabaseAdmin(env);
@@ -503,6 +559,7 @@ async function runShopifyInventorySync(origin: string) {
       forecastSaved: insertResult.forecastSaved,
       usedForecastColumns: insertResult.usedForecastColumns,
       snapshotDate,
+      shipheroSync,
     };
   } catch (error) {
     const message =
