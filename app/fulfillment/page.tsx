@@ -111,12 +111,14 @@ export default function FulfillmentPage() {
 
       setOrders(data.orders ?? []);
       setSyncedAt(data.syncedAt ?? null);
+      return data.syncedAt ?? null;
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unable to load on-hold orders.";
       setOrders([]);
       setSyncedAt(null);
       setSyncMessage({ type: "error", text: message });
+      return null;
     } finally {
       setLoadingOrders(false);
     }
@@ -185,8 +187,32 @@ export default function FulfillmentPage() {
           type: "success",
           text:
             data.message ||
-            "ShipHero update was queued in GitHub Actions. Refresh after it finishes.",
+            "ShipHero update was queued in GitHub Actions. This page will refresh when it finishes.",
         });
+
+        const previousSyncedAt = syncedAt;
+        const maxAttempts = 40;
+        const delayMs = 15000;
+
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+          const nextSyncedAt = await fetchOrders();
+
+          if (nextSyncedAt && nextSyncedAt !== previousSyncedAt) {
+            setSyncMessage({
+              type: "success",
+              text: "ShipHero on-hold update complete. Fulfillment was refreshed.",
+            });
+            break;
+          }
+
+          if (attempt === maxAttempts - 1) {
+            setSyncMessage({
+              type: "error",
+              text: "ShipHero update is taking longer than expected. Check GitHub Actions, then refresh Fulfillment.",
+            });
+          }
+        }
       } else {
         await fetchOrders();
         setSyncMessage({
