@@ -1475,11 +1475,20 @@ export default function InventoryPage() {
         throw new Error(data.error || "Shopify sync failed.");
       }
 
-      setInventoryMessage({
-        type: "success",
-        text: `Synced ${data.inserted ?? 0} Shopify rows and saved ${data.forecastSaved ?? 0} forecast rows for ${data.snapshotDate}.`,
-      });
-      await loadShopifyInventory(true, selectedDate);
+      if (data.queued) {
+        setInventoryMessage({
+          type: "success",
+          text:
+            data.message ||
+            "Inventory sync was queued. Refresh after the workflow finishes.",
+        });
+      } else {
+        setInventoryMessage({
+          type: "success",
+          text: `Synced ${data.inserted ?? 0} Shopify rows and saved ${data.forecastSaved ?? 0} forecast rows for ${data.snapshotDate}.`,
+        });
+        await loadShopifyInventory(true, selectedDate);
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Shopify sync failed.";

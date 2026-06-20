@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { createClient } from "@supabase/supabase-js";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { dispatchGitHubWorkflow } from "@/lib/githubActions";
 import {
   buildInventoryForecastRows,
   fetchPd90DaySalesBySku,
@@ -98,6 +99,12 @@ type Sales90DayResponse = {
     sku: string;
     quantity: number;
   }>;
+};
+
+type ShipheroSyncResult = {
+  mode: string;
+  stdout: string;
+  stderr: string;
 };
 
 const SHOPIFY_API_VERSION = "2026-04";
@@ -417,7 +424,7 @@ async function insertSnapshotRows(
   };
 }
 
-async function refreshShipheroIntransit() {
+async function refreshShipheroIntransit(): Promise<ShipheroSyncResult> {
   if (process.env.VERCEL === "1") {
     return {
       mode: "skipped",
@@ -476,9 +483,18 @@ async function refreshShipheroIntransit() {
   }
 }
 
-async function runShopifyInventorySync(origin: string) {
+async function runShopifyInventorySync(
+  origin: string,
+  options: { skipShipheroRefresh?: boolean } = {}
+) {
   try {
-    const shipheroSync = await refreshShipheroIntransit();
+    const shipheroSync = options.skipShipheroRefresh
+      ? {
+          mode: "workflow-preloaded",
+          stdout: "ShipHero in-transit sync was already run by the workflow.",
+          stderr: "",
+        }
+      : await refreshShipheroIntransit();
     const env = await getEnvMap();
 
     const supabaseAdmin = getSupabaseAdmin(env);
@@ -582,7 +598,41 @@ async function runShopifyInventorySync(origin: string) {
 }
 
 export async function GET(request: Request) {
-  const result = await runShopifyInventorySync(new URL(request.url).origin);
+  const url = new URL(request.url);
+  const skipShipheroRefresh =
+    url.searchParams.get("skip_shiphero") === "1" ||
+    request.headers.get("x-shiphero-preloaded") === "1";
+
+  if (process.env.VERCEL === "1" && !skipShipheroRefresh) {
+    try {
+      const env = await getEnvMap();
+      const workflow = await dispatchGitHubWorkflow(env, {
+        workflowId: "shiphero-intransit-inventory-sync.yml",
+        inputs: {
+          source: "inventory-click",
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        queued: true,
+        workflow,
+        message:
+          "Inventory sync was queued in GitHub Actions. It will refresh ShipHero On Order first, then sync Shopify inventory.",
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to queue inventory sync.";
+
+      return NextResponse.json({ success: false, error: message }, { status: 500 });
+    }
+  }
+
+  const result = await runShopifyInventorySync(url.origin, {
+    skipShipheroRefresh,
+  });
 
   if (!result.success) {
     return NextResponse.json(result, { status: 500 });
