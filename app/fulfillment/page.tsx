@@ -185,18 +185,18 @@ export default function FulfillmentPage() {
           type: "success",
           text:
             data.message ||
-            "ShipHero sync was queued in GitHub Actions. Refresh after it finishes.",
+            "ShipHero update was queued in GitHub Actions. Refresh after it finishes.",
         });
       } else {
         await fetchOrders();
         setSyncMessage({
           type: "success",
-          text: "ShipHero on-hold sync complete.",
+          text: "ShipHero on-hold update complete.",
         });
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "ShipHero sync failed.";
+        error instanceof Error ? error.message : "ShipHero update failed.";
       setSyncMessage({ type: "error", text: message });
     } finally {
       setSyncing(false);
@@ -240,7 +240,7 @@ export default function FulfillmentPage() {
       setShowScheduleFields(false);
       setSyncMessage({
         type: "success",
-        text: "ShipHero on-hold schedule saved to Supabase.",
+        text: "ShipHero on-hold update schedule saved to Supabase.",
       });
     } catch (error) {
       const message =
@@ -277,7 +277,7 @@ export default function FulfillmentPage() {
                 className="flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <RefreshCw size={13} className={syncing ? "animate-spin" : ""} />
-                {syncing ? "Syncing..." : "Sync"}
+                {syncing ? "Updating..." : "Update"}
               </button>
             </div>
           )}
@@ -389,7 +389,7 @@ export default function FulfillmentPage() {
           <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
               <h2 className="text-lg font-semibold text-slate-900">
-                ShipHero Sync
+                ShipHero Update
               </h2>
               <button
                 type="button"
@@ -412,7 +412,7 @@ export default function FulfillmentPage() {
                   className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <RefreshCw size={16} className={syncing ? "animate-spin" : ""} />
-                  Sync now
+                  Update now
                 </button>
                 <button
                   type="button"
