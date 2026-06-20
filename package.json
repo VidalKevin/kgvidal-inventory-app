@@ -9,7 +9,6 @@
     "lint": "eslint",
     "deploy": "opennextjs-cloudflare build",
     "sync:shiphero-intransit": "node scripts/sync-shiphero-intransit.mjs",
-    "sync:shiphero-onhold": "node scripts/sync-shiphero-onhold.mjs",
     "db:vendor-settings": "node scripts/apply-vendor-settings-migration.mjs"
   },
   "dependencies": {
