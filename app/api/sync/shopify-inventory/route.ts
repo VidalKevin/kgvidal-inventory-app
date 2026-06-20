@@ -418,6 +418,15 @@ async function insertSnapshotRows(
 }
 
 async function refreshShipheroIntransit() {
+  if (process.env.VERCEL === "1") {
+    return {
+      mode: "skipped",
+      stdout:
+        "ShipHero Playwright refresh skipped on Vercel. Run it from a hosted Playwright worker or local app session before Shopify sync.",
+      stderr: "",
+    };
+  }
+
   const scriptPath = path.join(
     process.cwd(),
     "scripts",
