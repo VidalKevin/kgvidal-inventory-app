@@ -1,0 +1,33 @@
+name: ShipHero On-Hold Scheduled Sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+jobs:
+  schedule-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Call ShipHero on-hold schedule endpoint
+        env:
+          APP_URL: ${{ secrets.SHOPIFY_SYNC_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ]; then
+            echo "Missing SHOPIFY_SYNC_APP_URL secret."
+            exit 1
+          fi
+
+          endpoint="${APP_URL%/}/api/cron/shiphero-onhold"
+          echo "Calling $endpoint at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+          if [ -n "$CRON_SECRET" ]; then
+            curl --fail-with-body --show-error --silent \
+              --header "Authorization: Bearer $CRON_SECRET" \
+              "$endpoint"
+          else
+            curl --fail-with-body --show-error --silent "$endpoint"
+          fi

@@ -170,6 +170,8 @@ export default function FulfillmentPage() {
       });
       const data = (await response.json()) as {
         success?: boolean;
+        queued?: boolean;
+        message?: string;
         error?: string;
         details?: string;
       };
@@ -178,8 +180,20 @@ export default function FulfillmentPage() {
         throw new Error(data.details || data.error || "ShipHero sync failed.");
       }
 
-      await fetchOrders();
-      setSyncMessage({ type: "success", text: "ShipHero on-hold sync complete." });
+      if (data.queued) {
+        setSyncMessage({
+          type: "success",
+          text:
+            data.message ||
+            "ShipHero sync was queued in GitHub Actions. Refresh after it finishes.",
+        });
+      } else {
+        await fetchOrders();
+        setSyncMessage({
+          type: "success",
+          text: "ShipHero on-hold sync complete.",
+        });
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "ShipHero sync failed.";

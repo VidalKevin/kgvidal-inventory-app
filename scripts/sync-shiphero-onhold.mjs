@@ -109,9 +109,37 @@ async function waitForShipheroLogin(page) {
     return;
   }
 
+  const email = process.env.SHIPHERO_EMAIL;
+  const password = process.env.SHIPHERO_PASSWORD;
+
+  if (email && password) {
+    await page
+      .getByLabel(/email/i)
+      .or(page.locator('input[type="email"], input[name="email"]').first())
+      .fill(email);
+    await page
+      .getByRole("button", { name: /continue|next|log in|login/i })
+      .first()
+      .click();
+    await page.waitForTimeout(1500);
+    await page
+      .getByLabel(/password/i)
+      .or(page.locator('input[type="password"], input[name="password"]').first())
+      .fill(password);
+    await page
+      .getByRole("button", { name: /continue|log in|login|sign in/i })
+      .first()
+      .click();
+    await page.waitForURL("**/dashboard/orders**", {
+      timeout: 2 * 60 * 1000,
+    });
+    await page.waitForLoadState("domcontentloaded");
+    return;
+  }
+
   if (process.env.SHIPHERO_HEADLESS === "true") {
     throw new Error(
-      "ShipHero session is not logged in. Run this sync locally once with the visible browser and log in."
+      "ShipHero session is not logged in. Add SHIPHERO_EMAIL and SHIPHERO_PASSWORD GitHub secrets, or run this sync locally once with the visible browser and log in."
     );
   }
 

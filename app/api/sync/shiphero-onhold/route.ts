@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { dispatchGitHubWorkflow } from "@/lib/githubActions";
 import { getSupabaseAdminFromEnv, type EnvMap } from "@/lib/supabaseEnv";
 
 export const runtime = "nodejs";
@@ -42,13 +43,30 @@ export async function GET() {
 
 export async function POST() {
   if (process.env.VERCEL === "1") {
-    return NextResponse.json(
-      {
-        error:
-          "ShipHero Playwright sync needs to run locally or in a hosted Playwright worker.",
-      },
-      { status: 400 }
-    );
+    try {
+      const env = await getEnvMap();
+      const workflow = await dispatchGitHubWorkflow(env, {
+        workflowId: "shiphero-onhold-sync.yml",
+        inputs: {
+          source: "app-click",
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        queued: true,
+        workflow,
+        message:
+          "ShipHero Playwright sync was queued in GitHub Actions. Refresh Fulfillment after the workflow finishes.",
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to queue ShipHero sync.";
+
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
   }
 
   const scriptPath = path.join(
