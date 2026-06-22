@@ -158,6 +158,33 @@ async function selectAllVisibleRows(page) {
   }
 }
 
+async function waitForManageOrdersResults(page) {
+  await page.waitForLoadState("domcontentloaded");
+  await page.waitForTimeout(2500);
+  await page.waitForFunction(
+    () => {
+      const bodyText = document.body?.textContent ?? "";
+      const noResults = /no matching records|no data available|showing 0 to 0|0 entries/i.test(
+        bodyText
+      );
+      const tableReady = Array.from(document.querySelectorAll("table")).some((table) => {
+        const tableText = table.textContent?.toLowerCase() ?? "";
+        const hasOrderHeaders =
+          tableText.includes("order") ||
+          tableText.includes("customer") ||
+          tableText.includes("email") ||
+          tableText.includes("hold");
+
+        return hasOrderHeaders && table.querySelector("tbody");
+      });
+
+      return noResults || tableReady;
+    },
+    null,
+    { timeout: 90000 }
+  );
+}
+
 async function selectOptionByText(page, optionText) {
   const selects = page.locator("select");
   const count = await selects.count();
@@ -193,26 +220,54 @@ async function applyManageOrderFilters(page) {
 
 async function extractOnHoldOrders(page) {
   return page.evaluate(() => {
+    const bodyText = document.body?.textContent ?? "";
+    const noResults = /no matching records|no data available|showing 0 to 0|0 entries/i.test(
+      bodyText
+    );
     const tableSelectors = ["#orders_table", "#orders", "table"];
-    let table = null;
+    const tables = [];
 
     for (const selector of tableSelectors) {
-      const found = document.querySelector(selector);
+      document.querySelectorAll(selector).forEach((found) => {
+        if (!tables.includes(found)) {
+          tables.push(found);
+        }
+      });
+    }
 
-      if (found?.querySelector("tbody tr")) {
-        table = found;
-        break;
-      }
+    const normalize = (value) => value.trim().replace(/\s+/g, " ").toLowerCase();
+    const tableScore = (table) => {
+      const text = normalize(table.textContent ?? "");
+      let score = 0;
+      if (text.includes("order")) score += 3;
+      if (text.includes("email")) score += 2;
+      if (text.includes("hold")) score += 2;
+      if (text.includes("customer") || text.includes("recipient")) score += 1;
+      if (table.querySelector("tbody tr")) score += 1;
+      return score;
+    };
+
+    const table = tables
+      .filter((found) => found.querySelector("tbody"))
+      .sort((left, right) => tableScore(right) - tableScore(left))[0];
+
+    if (!table && noResults) {
+      return {
+        tableInfo: document.querySelector(".dataTables_info")?.textContent.trim(),
+        totalRows: 0,
+        headers: [],
+        orders: [],
+      };
     }
 
     if (!table) {
       throw new Error(
-        "Could not find orders table. Check that Manage Orders loaded with results."
+        `Could not find orders table. URL: ${location.href}. Page title: ${document.title}.`
       );
     }
 
     const headers = Array.from(table.querySelectorAll("thead th")).map((th) =>
-      th.textContent.trim().replace(/\s+/g, " ").toLowerCase()
+      normalize(th.textContent)
     );
 
     const colIndex = (keywords) => {
@@ -348,8 +403,9 @@ async function main() {
     );
     await waitForShipheroLogin(page);
     await applyManageOrderFilters(page);
-    await page.waitForSelector("table tbody tr", { timeout: 60000 });
+    await waitForManageOrdersResults(page);
     await selectAllVisibleRows(page);
+    await waitForManageOrdersResults(page);
 
     const result = await extractOnHoldOrders(page);
     const saved = await saveOrdersToSupabase(result.orders);
