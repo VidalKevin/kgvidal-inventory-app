@@ -213,9 +213,26 @@ async function selectOptionByText(page, optionText) {
   return false;
 }
 
+async function checkByLabelText(page, labelText) {
+  const checkbox = page
+    .getByLabel(new RegExp(`^\\s*${labelText}\\s*$`, "i"))
+    .or(
+      page.locator("label", { hasText: new RegExp(`^\\s*${labelText}\\s*$`, "i") }).locator("input")
+    )
+    .first();
+
+  if ((await checkbox.count()) === 0) {
+    return false;
+  }
+
+  await checkbox.check({ force: true });
+  await page.waitForTimeout(800);
+  return true;
+}
+
 async function applyManageOrderFilters(page) {
   await selectOptionByText(page, "Unfulfilled");
-  await selectOptionByText(page, "Any Hold");
+  await checkByLabelText(page, "Any Hold");
 }
 
 async function extractOnHoldOrders(page) {
@@ -295,6 +312,10 @@ async function extractOnHoldOrders(page) {
     const holdIndex = colIndex(["on hold", "hold"]);
     const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 
+    if (holdIndex < 0) {
+      throw new Error(`Could not find On Hold column. Headers: ${headers.join(", ")}`);
+    }
+
     const rows = Array.from(table.querySelectorAll("tbody tr")).map((tr) => {
       const cells = Array.from(tr.querySelectorAll("td")).map((td) =>
         td.textContent.trim().replace(/\s+/g, " ")
@@ -322,11 +343,10 @@ async function extractOnHoldOrders(page) {
             orderIndex >= 0 ? row.cells[orderIndex] || null : null,
           first_name: firstName || null,
           email: emailMatch?.[0] ?? null,
-          on_hold:
-            holdIndex >= 0 ? row.cells[holdIndex] || "Any Hold" : "Any Hold",
+          on_hold: row.cells[holdIndex] || null,
         };
       })
-      .filter((order) => order.order_number || order.email);
+      .filter((order) => order.on_hold && (order.order_number || order.email));
 
     return {
       tableInfo: document.querySelector(".dataTables_info")?.textContent.trim(),
