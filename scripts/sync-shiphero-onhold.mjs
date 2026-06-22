@@ -122,10 +122,7 @@ async function waitForShipheroLogin(page) {
       .first()
       .click();
     await page.waitForTimeout(1500);
-    await page
-      .getByLabel(/password/i)
-      .or(page.locator('input[type="password"], input[name="password"]').first())
-      .fill(password);
+    await page.locator('input[type="password"], input[name="password"]').first().fill(password);
     await page
       .getByRole("button", { name: /continue|log in|login|sign in/i })
       .first()
