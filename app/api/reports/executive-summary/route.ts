@@ -271,10 +271,7 @@ function moneyValue(moneySet: MoneySet | null | undefined) {
 function isCountedOrder(
   order: ShopifyOrdersResponse["orders"]["edges"][number]["node"]
 ) {
-  return (
-    !order.cancelledAt &&
-    COUNTED_FINANCIAL_STATUSES.has(order.displayFinancialStatus)
-  );
+  return COUNTED_FINANCIAL_STATUSES.has(order.displayFinancialStatus);
 }
 
 function lineQuantity(lineItem: {
@@ -327,8 +324,12 @@ async function fetchSummaryMetrics(
       }
 
       metrics.totalOrders += 1;
-      metrics.totalSales += moneyValue(order.currentTotalPriceSet);
-      metrics.totalNet += moneyValue(order.currentSubtotalPriceSet);
+      const isCancelled = Boolean(order.cancelledAt);
+
+      if (!isCancelled) {
+        metrics.totalSales += moneyValue(order.currentTotalPriceSet);
+        metrics.totalNet += moneyValue(order.currentSubtotalPriceSet);
+      }
       const isInternational =
         order.shippingAddress?.countryCodeV2 &&
         order.shippingAddress.countryCodeV2 !== "US";
@@ -424,7 +425,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       {
-        calculationVersion: "shopify-analytics-order-status-v2",
+        calculationVersion: "shopify-analytics-order-status-v3",
         current,
         previous,
         currentRange,
