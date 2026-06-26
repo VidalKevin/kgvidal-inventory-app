@@ -428,6 +428,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       {
+        calculationVersion: "shopify-analytics-order-status-v2",
         current,
         previous,
         currentRange,
