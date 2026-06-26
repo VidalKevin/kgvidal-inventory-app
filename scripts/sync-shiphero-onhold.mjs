@@ -52,22 +52,26 @@ function toIsoDate(value) {
     return null;
   }
 
+  const match = text.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
+
+  if (match) {
+    const [, month, day, year] = match;
+    const fullYear = year.length === 2 ? `20${year}` : year;
+
+    return `${fullYear}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+
   const parsed = new Date(text);
 
   if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toISOString().slice(0, 10);
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+    const year = parsed.getFullYear();
+
+    return `${year}-${month}-${day}`;
   }
 
-  const match = text.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
-
-  if (!match) {
-    return null;
-  }
-
-  const [, month, day, year] = match;
-  const fullYear = year.length === 2 ? `20${year}` : year;
-
-  return `${fullYear}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  return null;
 }
 
 async function getPlaywright() {

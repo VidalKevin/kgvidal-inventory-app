@@ -41,6 +41,21 @@ function formatDate(value: string | null) {
     return "-";
   }
 
+  const dateOnly = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (dateOnly) {
+    const [, year, month, day] = dateOnly;
+    return new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day)
+    ).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
