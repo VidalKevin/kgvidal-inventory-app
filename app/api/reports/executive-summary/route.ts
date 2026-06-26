@@ -261,15 +261,7 @@ function sameRangeLastYear(startDate: Date, endDate: Date) {
 }
 
 function dateRangeQuery(startDate: string, endDate: string) {
-  const nextDay = parseDateInput(endDate);
-
-  if (!nextDay) {
-    return `created_at:>=${startDate} created_at:<=${endDate}`;
-  }
-
-  nextDay.setDate(nextDay.getDate() + 1);
-
-  return `created_at:>=${startDate} created_at:<${toDateInputValue(nextDay)}`;
+  return `created_at:>=${startDate} created_at:<=${endDate}`;
 }
 
 function moneyValue(moneySet: MoneySet | null | undefined) {
