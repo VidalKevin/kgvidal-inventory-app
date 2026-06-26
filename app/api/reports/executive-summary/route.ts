@@ -65,8 +65,6 @@ type SummaryMetrics = {
   aveOrder: number;
   totalOrders: number;
   totalNet: number;
-  statusCounts: Record<string, number>;
-  debugTotals: Record<string, number>;
 };
 
 const SHOPIFY_API_VERSION = "2026-04";
@@ -314,21 +312,14 @@ async function fetchSummaryMetrics(
     aveOrder: 0,
     totalOrders: 0,
     totalNet: 0,
-    statusCounts: {},
-    debugTotals: {
-      currentSubtotal: 0,
-      currentTotalDiscounts: 0,
-      currentTotalPrice: 0,
-      subtotal: 0,
-      totalDiscounts: 0,
-      totalPrice: 0,
-      totalRefunded: 0,
-    },
   };
 
   let cursor: string | null = null;
   let hasNextPage = true;
   let grossMinusDiscounts = 0;
+  let totalDiscounts = 0;
+  let totalRefunded = 0;
+  let shippingTaxAndAdjustments = 0;
 
   while (hasNextPage) {
     const data: ShopifyOrdersResponse = await shopifyGraphQL<ShopifyOrdersResponse>(
@@ -343,8 +334,6 @@ async function fetchSummaryMetrics(
 
     for (const edge of data.orders.edges) {
       const order = edge.node;
-      const status = order.displayFinancialStatus || "UNKNOWN";
-      metrics.statusCounts[status] = (metrics.statusCounts[status] ?? 0) + 1;
 
       if (!isCountedOrder(order)) {
         continue;
@@ -354,23 +343,12 @@ async function fetchSummaryMetrics(
       const isCancelled = Boolean(order.cancelledAt);
 
       if (!isCancelled) {
-        metrics.totalSales += moneyValue(order.currentTotalPriceSet);
-        metrics.totalNet += moneyValue(order.currentSubtotalPriceSet);
+        shippingTaxAndAdjustments +=
+          moneyValue(order.currentTotalPriceSet) -
+          moneyValue(order.currentSubtotalPriceSet);
       }
-
-      metrics.debugTotals.currentSubtotal += moneyValue(
-        order.currentSubtotalPriceSet
-      );
-      metrics.debugTotals.currentTotalDiscounts += moneyValue(
-        order.currentTotalDiscountsSet
-      );
-      metrics.debugTotals.currentTotalPrice += moneyValue(
-        order.currentTotalPriceSet
-      );
-      metrics.debugTotals.subtotal += moneyValue(order.subtotalPriceSet);
-      metrics.debugTotals.totalDiscounts += moneyValue(order.totalDiscountsSet);
-      metrics.debugTotals.totalPrice += moneyValue(order.totalPriceSet);
-      metrics.debugTotals.totalRefunded += moneyValue(order.totalRefundedSet);
+      totalDiscounts += moneyValue(order.totalDiscountsSet);
+      totalRefunded += moneyValue(order.totalRefundedSet);
       const isInternational =
         order.shippingAddress?.countryCodeV2 &&
         order.shippingAddress.countryCodeV2 !== "US";
@@ -414,6 +392,8 @@ async function fetchSummaryMetrics(
 
   metrics.aveOrder =
     metrics.totalOrders > 0 ? grossMinusDiscounts / metrics.totalOrders : 0;
+  metrics.totalNet = metrics.shopifyTotal - totalDiscounts - totalRefunded;
+  metrics.totalSales = metrics.totalNet + shippingTaxAndAdjustments;
 
   return metrics;
 }
