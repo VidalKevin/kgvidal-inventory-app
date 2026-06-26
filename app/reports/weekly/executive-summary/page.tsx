@@ -50,21 +50,177 @@ const miniSections = [
   },
 ];
 
-function BlankInput() {
-  return (
-    <input
-      type="text"
-      className="h-full w-full border-0 bg-transparent px-1 text-center text-[8px] outline-none"
-    />
-  );
+type SummaryMetrics = {
+  shopifyTotal: number;
+  suppOnlySales: number;
+  shopifyLabs: number;
+  internationalSales: number;
+  aveOrder: number;
+  totalOrders: number;
+  totalNet: number;
+};
+
+type ExecutiveSummaryResponse = {
+  current: SummaryMetrics;
+  previous: SummaryMetrics;
+  currentRange: {
+    startDate: string;
+    endDate: string;
+  };
+  previousRange: {
+    startDate: string;
+    endDate: string;
+  };
+  error?: string;
+};
+
+function formatCurrency(value: number | null | undefined) {
+  if (value == null) {
+    return "";
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatNumber(value: number | null | undefined) {
+  if (value == null) {
+    return "";
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatValue(row: string, metrics: SummaryMetrics | null) {
+  if (!metrics) {
+    return "";
+  }
+
+  switch (row) {
+    case "Total Sales:":
+    case "Shopify Total:":
+      return formatCurrency(metrics.shopifyTotal);
+    case "Supp Only Sales:":
+      return formatCurrency(metrics.suppOnlySales);
+    case "Shopify Labs:":
+      return formatCurrency(metrics.shopifyLabs);
+    case "International Sales:":
+      return formatCurrency(metrics.internationalSales);
+    case "Ave Order:":
+      return formatCurrency(metrics.aveOrder);
+    case "Total Orders:":
+      return formatNumber(metrics.totalOrders);
+    case "Total Net:":
+      return formatCurrency(metrics.totalNet);
+    default:
+      return "";
+  }
+}
+
+function getMetricValue(row: string, metrics: SummaryMetrics | null) {
+  if (!metrics) {
+    return null;
+  }
+
+  switch (row) {
+    case "Total Gross (Shopify gross, HC Labs, Dutch Portal)":
+      return metrics.shopifyTotal;
+    case "Shopify Supps":
+      return metrics.suppOnlySales;
+    case "Shopify Labs":
+      return metrics.shopifyLabs;
+    case "AOV (Avg Order Value)":
+      return metrics.aveOrder;
+    case "Total Orders (Vidal & PD)":
+      return metrics.totalOrders;
+    case "Total Net (Vidal & PD)":
+      return metrics.totalNet;
+    default:
+      return null;
+  }
+}
+
+function formatComparisonValue(row: string, value: number | null) {
+  if (value == null) {
+    return "";
+  }
+
+  if (row === "Total Orders (Vidal & PD)") {
+    return formatNumber(value);
+  }
+
+  return formatCurrency(value);
+}
+
+function monthYearLabel(dateValue: string) {
+  if (!dateValue) {
+    return "Current Month";
+  }
+
+  const [year, month, day] = dateValue.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function defaultDateInput(daysAgo: number) {
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 export default function ExecutiveSummaryReportPage() {
   const currentYear = new Date().getFullYear();
   const lastYear = currentYear - 1;
 
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [startDate, setStartDate] = useState(defaultDateInput(25));
+  const [endDate, setEndDate] = useState(defaultDateInput(0));
+  const [summary, setSummary] = useState<ExecutiveSummaryResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const currentLabel = monthYearLabel(summary?.currentRange.startDate ?? startDate);
+  const previousLabel = monthYearLabel(
+    summary?.previousRange.startDate ??
+      `${Number(startDate.slice(0, 4)) - 1}${startDate.slice(4)}`
+  );
+
+  const loadSummary = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const params = new URLSearchParams({ startDate, endDate });
+      const response = await fetch(
+        `/api/reports/executive-summary?${params.toString()}`
+      );
+      const data = (await response.json()) as ExecutiveSummaryResponse;
+
+      if (!response.ok || data.error) {
+        throw new Error(data.error || "Unable to load executive summary.");
+      }
+
+      setSummary(data);
+    } catch (fetchError) {
+      const message =
+        fetchError instanceof Error
+          ? fetchError.message
+          : "Unable to load executive summary.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <section className="w-full">
@@ -99,11 +255,22 @@ export default function ExecutiveSummaryReportPage() {
             />
           </div>
 
-          <button className="h-7 rounded bg-[#10182d] px-4 text-[10px] font-bold text-white">
-            Apply Filter
+          <button
+            type="button"
+            onClick={loadSummary}
+            disabled={loading}
+            className="h-7 rounded bg-[#10182d] px-4 text-[10px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? "Loading..." : "Apply Filter"}
           </button>
         </div>
       </div>
+
+      {error ? (
+        <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </div>
+      ) : null}
 
       <div className="w-full overflow-x-auto bg-white text-black">
         <div className="origin-top-left min-[1500px]:[zoom:1.55] min-[1800px]:[zoom:1.9] min-[2100px]:[zoom:2.2]">
@@ -143,13 +310,32 @@ export default function ExecutiveSummaryReportPage() {
                 <tr key={row}>
                   <td className="border border-black px-1 py-[1px]">{row}</td>
                   <td className="h-[14px] border border-black">
-                    <BlankInput />
+                    {formatComparisonValue(
+                      row,
+                      getMetricValue(row, summary?.previous ?? null)
+                    )}
                   </td>
                   <td className="h-[14px] border border-black">
-                    <BlankInput />
+                    {formatComparisonValue(
+                      row,
+                      getMetricValue(row, summary?.current ?? null)
+                    )}
                   </td>
                   <td className="h-[14px] border border-black">
-                    <BlankInput />
+                    {(() => {
+                      const current = getMetricValue(
+                        row,
+                        summary?.current ?? null
+                      );
+                      const previous = getMetricValue(
+                        row,
+                        summary?.previous ?? null
+                      );
+
+                      return current == null || previous == null
+                        ? ""
+                        : formatComparisonValue(row, current - previous);
+                    })()}
                   </td>
                 </tr>
               ))}
@@ -181,7 +367,7 @@ export default function ExecutiveSummaryReportPage() {
               <thead>
                 <tr>
                   <th className="w-[175px] border border-black bg-[#0b3f68] py-[1px] text-center text-white">
-                    VL Current Month | Current Year
+                    VL {currentLabel}
                   </th>
 
                   <th className="w-[85px] border border-black bg-[#0b3f68] py-[1px] text-center text-white">
@@ -195,7 +381,7 @@ export default function ExecutiveSummaryReportPage() {
                   <tr key={row}>
                     <td className="border border-black px-1 py-[1px]">{row}</td>
                     <td className="h-[14px] border border-black">
-                      <BlankInput />
+                      {formatValue(row, summary?.current ?? null)}
                     </td>
                   </tr>
                 ))}
@@ -206,7 +392,7 @@ export default function ExecutiveSummaryReportPage() {
               <thead>
                 <tr>
                   <th className="w-[215px] border border-black bg-[#0b3f68] py-[1px] text-center text-white">
-                    VL Current Month | Last Year
+                    VL {previousLabel}
                   </th>
 
                   <th className="w-[75px] border border-black bg-[#0b3f68] py-[1px] text-center text-white">
@@ -224,10 +410,10 @@ export default function ExecutiveSummaryReportPage() {
                   <tr key={row}>
                     <td className="border border-black px-1 py-[1px]">{row}</td>
                     <td className="h-[14px] border border-black">
-                      <BlankInput />
+                      {formatValue(row, summary?.previous ?? null)}
                     </td>
                     <td className="h-[14px] border border-black">
-                      <BlankInput />
+                      {formatValue(row, summary?.previous ?? null)}
                     </td>
                   </tr>
                 ))}
