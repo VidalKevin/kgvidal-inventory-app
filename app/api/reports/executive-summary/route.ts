@@ -29,6 +29,10 @@ type ShopifyOrdersResponse = {
         currentSubtotalPriceSet: MoneySet;
         currentTotalDiscountsSet: MoneySet;
         currentTotalPriceSet: MoneySet;
+        subtotalPriceSet: MoneySet;
+        totalDiscountsSet: MoneySet;
+        totalPriceSet: MoneySet;
+        totalRefundedSet: MoneySet;
         shippingAddress: {
           countryCodeV2: string | null;
         } | null;
@@ -62,6 +66,7 @@ type SummaryMetrics = {
   totalOrders: number;
   totalNet: number;
   statusCounts: Record<string, number>;
+  debugTotals: Record<string, number>;
 };
 
 const SHOPIFY_API_VERSION = "2026-04";
@@ -96,6 +101,26 @@ const ORDERS_QUERY = `
             }
           }
           currentTotalPriceSet {
+            shopMoney {
+              amount
+            }
+          }
+          subtotalPriceSet {
+            shopMoney {
+              amount
+            }
+          }
+          totalDiscountsSet {
+            shopMoney {
+              amount
+            }
+          }
+          totalPriceSet {
+            shopMoney {
+              amount
+            }
+          }
+          totalRefundedSet {
             shopMoney {
               amount
             }
@@ -297,6 +322,15 @@ async function fetchSummaryMetrics(
     totalOrders: 0,
     totalNet: 0,
     statusCounts: {},
+    debugTotals: {
+      currentSubtotal: 0,
+      currentTotalDiscounts: 0,
+      currentTotalPrice: 0,
+      subtotal: 0,
+      totalDiscounts: 0,
+      totalPrice: 0,
+      totalRefunded: 0,
+    },
   };
 
   let cursor: string | null = null;
@@ -330,6 +364,20 @@ async function fetchSummaryMetrics(
         metrics.totalSales += moneyValue(order.currentTotalPriceSet);
         metrics.totalNet += moneyValue(order.currentSubtotalPriceSet);
       }
+
+      metrics.debugTotals.currentSubtotal += moneyValue(
+        order.currentSubtotalPriceSet
+      );
+      metrics.debugTotals.currentTotalDiscounts += moneyValue(
+        order.currentTotalDiscountsSet
+      );
+      metrics.debugTotals.currentTotalPrice += moneyValue(
+        order.currentTotalPriceSet
+      );
+      metrics.debugTotals.subtotal += moneyValue(order.subtotalPriceSet);
+      metrics.debugTotals.totalDiscounts += moneyValue(order.totalDiscountsSet);
+      metrics.debugTotals.totalPrice += moneyValue(order.totalPriceSet);
+      metrics.debugTotals.totalRefunded += moneyValue(order.totalRefundedSet);
       const isInternational =
         order.shippingAddress?.countryCodeV2 &&
         order.shippingAddress.countryCodeV2 !== "US";
