@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type EnvMap = Record<string, string | undefined>;
 
@@ -425,12 +426,19 @@ export async function GET(request: Request) {
       ),
     ]);
 
-    return NextResponse.json({
-      current,
-      previous,
-      currentRange,
-      previousRange,
-    });
+    return NextResponse.json(
+      {
+        current,
+        previous,
+        currentRange,
+        previousRange,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
 

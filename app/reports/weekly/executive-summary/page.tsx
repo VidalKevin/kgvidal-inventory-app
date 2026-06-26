@@ -204,7 +204,8 @@ export default function ExecutiveSummaryReportPage() {
     try {
       const params = new URLSearchParams({ startDate, endDate });
       const response = await fetch(
-        `/api/reports/executive-summary?${params.toString()}`
+        `/api/reports/executive-summary?${params.toString()}`,
+        { cache: "no-store" }
       );
       const data = (await response.json()) as ExecutiveSummaryResponse;
 
