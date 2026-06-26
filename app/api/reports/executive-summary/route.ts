@@ -299,13 +299,6 @@ function isCountedOrder(
   return COUNTED_FINANCIAL_STATUSES.has(order.displayFinancialStatus);
 }
 
-function lineQuantity(lineItem: {
-  quantity: number;
-  currentQuantity: number;
-}) {
-  return lineItem.currentQuantity ?? lineItem.quantity ?? 0;
-}
-
 async function fetchSummaryMetrics(
   env: EnvMap,
   accessToken: string,
@@ -389,7 +382,7 @@ async function fetchSummaryMetrics(
         const productType =
           lineItem.variant?.product.productType.trim().toLowerCase() ?? "";
 
-        if (lineQuantity(lineItem) <= 0) {
+        if (originalTotal <= 0) {
           continue;
         }
 
