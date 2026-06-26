@@ -61,6 +61,7 @@ type SummaryMetrics = {
   aveOrder: number;
   totalOrders: number;
   totalNet: number;
+  statusCounts: Record<string, number>;
 };
 
 const SHOPIFY_API_VERSION = "2026-04";
@@ -306,6 +307,7 @@ async function fetchSummaryMetrics(
     aveOrder: 0,
     totalOrders: 0,
     totalNet: 0,
+    statusCounts: {},
   };
 
   let cursor: string | null = null;
@@ -325,6 +327,8 @@ async function fetchSummaryMetrics(
 
     for (const edge of data.orders.edges) {
       const order = edge.node;
+      const status = order.displayFinancialStatus || "UNKNOWN";
+      metrics.statusCounts[status] = (metrics.statusCounts[status] ?? 0) + 1;
 
       if (!isCountedOrder(order)) {
         continue;
