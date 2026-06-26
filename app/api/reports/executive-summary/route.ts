@@ -65,6 +65,12 @@ type SummaryMetrics = {
 const SHOPIFY_API_VERSION = "2026-04";
 const SUPPLEMENT_PRODUCT_TYPES = new Set(["nutraceutical", "nutraceuticals"]);
 const LAB_PRODUCT_TYPES = new Set(["lab test public"]);
+const COUNTED_FINANCIAL_STATUSES = new Set([
+  "PAID",
+  "PARTIALLY_PAID",
+  "PARTIALLY_REFUNDED",
+  "REFUNDED",
+]);
 
 const ORDERS_QUERY = `
   query ExecutiveSummaryOrders($cursor: String, $query: String!) {
@@ -271,7 +277,10 @@ function moneyValue(moneySet: MoneySet | null | undefined) {
 function isCountedOrder(
   order: ShopifyOrdersResponse["orders"]["edges"][number]["node"]
 ) {
-  return !order.cancelledAt;
+  return (
+    !order.cancelledAt &&
+    COUNTED_FINANCIAL_STATUSES.has(order.displayFinancialStatus)
+  );
 }
 
 function lineQuantity(lineItem: {
