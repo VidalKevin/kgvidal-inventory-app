@@ -51,6 +51,7 @@ const miniSections = [
 ];
 
 type SummaryMetrics = {
+  totalSales: number;
   shopifyTotal: number;
   suppOnlySales: number;
   shopifyLabs: number;
@@ -103,6 +104,7 @@ function formatValue(row: string, metrics: SummaryMetrics | null) {
 
   switch (row) {
     case "Total Sales:":
+      return formatCurrency(metrics.totalSales);
     case "Shopify Total:":
       return formatCurrency(metrics.shopifyTotal);
     case "Supp Only Sales:":

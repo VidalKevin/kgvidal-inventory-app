@@ -25,6 +25,9 @@ type ShopifyOrdersResponse = {
       node: {
         cancelledAt: string | null;
         displayFinancialStatus: string;
+        currentSubtotalPriceSet: MoneySet;
+        currentTotalDiscountsSet: MoneySet;
+        currentTotalPriceSet: MoneySet;
         shippingAddress: {
           countryCodeV2: string | null;
         } | null;
@@ -49,6 +52,7 @@ type ShopifyOrdersResponse = {
 };
 
 type SummaryMetrics = {
+  totalSales: number;
   shopifyTotal: number;
   suppOnlySales: number;
   shopifyLabs: number;
@@ -61,11 +65,6 @@ type SummaryMetrics = {
 const SHOPIFY_API_VERSION = "2026-04";
 const SUPPLEMENT_PRODUCT_TYPES = new Set(["nutraceutical", "nutraceuticals"]);
 const LAB_PRODUCT_TYPES = new Set(["lab test public"]);
-const COUNTED_FINANCIAL_STATUSES = new Set([
-  "PAID",
-  "PARTIALLY_PAID",
-  "PARTIALLY_REFUNDED",
-]);
 
 const ORDERS_QUERY = `
   query ExecutiveSummaryOrders($cursor: String, $query: String!) {
@@ -78,6 +77,21 @@ const ORDERS_QUERY = `
         node {
           cancelledAt
           displayFinancialStatus
+          currentSubtotalPriceSet {
+            shopMoney {
+              amount
+            }
+          }
+          currentTotalDiscountsSet {
+            shopMoney {
+              amount
+            }
+          }
+          currentTotalPriceSet {
+            shopMoney {
+              amount
+            }
+          }
           shippingAddress {
             countryCodeV2
           }
@@ -239,7 +253,15 @@ function sameRangeLastYear(startDate: Date, endDate: Date) {
 }
 
 function dateRangeQuery(startDate: string, endDate: string) {
-  return `created_at:>=${startDate} created_at:<=${endDate}`;
+  const nextDay = parseDateInput(endDate);
+
+  if (!nextDay) {
+    return `created_at:>=${startDate} created_at:<=${endDate}`;
+  }
+
+  nextDay.setDate(nextDay.getDate() + 1);
+
+  return `created_at:>=${startDate} created_at:<${toDateInputValue(nextDay)}`;
 }
 
 function moneyValue(moneySet: MoneySet | null | undefined) {
@@ -249,10 +271,7 @@ function moneyValue(moneySet: MoneySet | null | undefined) {
 function isCountedOrder(
   order: ShopifyOrdersResponse["orders"]["edges"][number]["node"]
 ) {
-  return (
-    !order.cancelledAt &&
-    COUNTED_FINANCIAL_STATUSES.has(order.displayFinancialStatus)
-  );
+  return !order.cancelledAt;
 }
 
 function lineQuantity(lineItem: {
@@ -269,6 +288,7 @@ async function fetchSummaryMetrics(
   endDate: string
 ): Promise<SummaryMetrics> {
   const metrics: SummaryMetrics = {
+    totalSales: 0,
     shopifyTotal: 0,
     suppOnlySales: 0,
     shopifyLabs: 0,
@@ -280,6 +300,7 @@ async function fetchSummaryMetrics(
 
   let cursor: string | null = null;
   let hasNextPage = true;
+  let grossMinusDiscounts = 0;
 
   while (hasNextPage) {
     const data: ShopifyOrdersResponse = await shopifyGraphQL<ShopifyOrdersResponse>(
@@ -300,14 +321,16 @@ async function fetchSummaryMetrics(
       }
 
       metrics.totalOrders += 1;
+      metrics.totalSales += moneyValue(order.currentTotalPriceSet);
+      metrics.totalNet += moneyValue(order.currentSubtotalPriceSet);
       const isInternational =
         order.shippingAddress?.countryCodeV2 &&
         order.shippingAddress.countryCodeV2 !== "US";
+      let orderGross = 0;
 
       for (const lineItemEdge of order.lineItems.edges) {
         const lineItem = lineItemEdge.node;
         const originalTotal = moneyValue(lineItem.originalTotalSet);
-        const discountedTotal = moneyValue(lineItem.discountedTotalSet);
         const productType =
           lineItem.variant?.product.productType.trim().toLowerCase() ?? "";
 
@@ -315,8 +338,8 @@ async function fetchSummaryMetrics(
           continue;
         }
 
+        orderGross += originalTotal;
         metrics.shopifyTotal += originalTotal;
-        metrics.totalNet += discountedTotal;
 
         if (SUPPLEMENT_PRODUCT_TYPES.has(productType)) {
           metrics.suppOnlySales += originalTotal;
@@ -330,6 +353,11 @@ async function fetchSummaryMetrics(
           metrics.internationalSales += originalTotal;
         }
       }
+
+      grossMinusDiscounts += Math.max(
+        orderGross - moneyValue(order.currentTotalDiscountsSet),
+        0
+      );
     }
 
     hasNextPage = data.orders.pageInfo.hasNextPage;
@@ -337,7 +365,7 @@ async function fetchSummaryMetrics(
   }
 
   metrics.aveOrder =
-    metrics.totalOrders > 0 ? metrics.totalNet / metrics.totalOrders : 0;
+    metrics.totalOrders > 0 ? grossMinusDiscounts / metrics.totalOrders : 0;
 
   return metrics;
 }
