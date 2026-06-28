@@ -79,6 +79,70 @@ const ORDERS_QUERY = `
   }
 `;
 
+const ORDERS_QUERY_WITHOUT_PRODUCT = `
+  query PdOrdersWithoutProduct($cursor: String, $query: String!) {
+    orders(first: 50, after: $cursor, query: $query, sortKey: PROCESSED_AT) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      edges {
+        node {
+          id
+          name
+          processedAt
+          createdAt
+          updatedAt
+          displayFinancialStatus
+          cancelledAt
+          shippingAddress {
+            country
+            countryCodeV2
+          }
+          currentSubtotalPriceSet {
+            shopMoney {
+              amount
+            }
+          }
+          subtotalPriceSet {
+            shopMoney {
+              amount
+            }
+          }
+          transactions(first: 100) {
+            gateway
+            formattedGateway
+            kind
+            status
+            amountSet {
+              shopMoney {
+                amount
+              }
+            }
+          }
+          lineItems(first: 250) {
+            edges {
+              node {
+                id
+                sku
+                title
+                quantity
+                currentQuantity
+                vendor
+                originalTotalSet {
+                  shopMoney {
+                    amount
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
 function parseArgs() {
   const args = new Map();
 
@@ -149,7 +213,7 @@ function getSupabase() {
   );
 }
 
-async function shopifyGraphQL(query, variables) {
+async function shopifyGraphQL(query, variables, options = {}) {
   const storeDomain = requiredEnv("SHOPIFY_PD_STORE_DOMAIN");
   const accessToken = await getShopifyAccessToken(storeDomain);
   const response = await fetch(
@@ -163,12 +227,34 @@ async function shopifyGraphQL(query, variables) {
       body: JSON.stringify({ query, variables }),
     }
   );
-  const result = await response.json();
+  const result = await parseJsonResponse(response, "Practitioner Depot Shopify");
 
   if (!response.ok || result.errors) {
-    throw new Error(
-      `Practitioner Depot Shopify error: ${JSON.stringify(result.errors || result)}`
-    );
+    const errorText = JSON.stringify(result.errors || result);
+
+    if (!options.tokenRetried && errorText.includes("Invalid API key or access token")) {
+      cachedAccessToken = null;
+      console.warn("PD Shopify token was rejected. Refreshing token and retrying page.");
+      return shopifyGraphQL(query, variables, {
+        ...options,
+        tokenRetried: true,
+      });
+    }
+
+    if (
+      options.allowProductScopeFallback &&
+      Array.isArray(result.errors) &&
+      result.errors.some((error) =>
+        String(error?.extensions?.requiredAccess ?? "").includes("read_products")
+      )
+    ) {
+      console.warn(
+        "PD Shopify token is missing read_products. Importing without product type details."
+      );
+      return shopifyGraphQL(ORDERS_QUERY_WITHOUT_PRODUCT, variables);
+    }
+
+    throw new Error(`Practitioner Depot Shopify error: ${errorText}`);
   }
 
   return result.data;
@@ -199,7 +285,7 @@ async function getShopifyAccessToken(storeDomain) {
       client_secret: clientSecret,
     }),
   });
-  const data = await response.json();
+  const data = await parseJsonResponse(response, "Practitioner Depot Shopify token");
 
   if (!response.ok || !data.access_token) {
     throw new Error(`Practitioner Depot Shopify token error: ${JSON.stringify(data)}`);
@@ -207,6 +293,31 @@ async function getShopifyAccessToken(storeDomain) {
 
   cachedAccessToken = data.access_token;
   return cachedAccessToken;
+}
+
+async function parseJsonResponse(response, label) {
+  const text = await response.text();
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(
+      `${label} returned non-JSON response (${response.status}): ${text.slice(0, 300)}`
+    );
+  }
+}
+
+function isTransientShopifyError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("returned non-JSON response") ||
+    message.includes("Throttled") ||
+    message.includes("Too Many Requests")
+  );
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function moneyValue(moneySet) {
@@ -369,7 +480,7 @@ async function run() {
   });
 
   while (hasNextPage) {
-    const data = await shopifyGraphQL(ORDERS_QUERY, { cursor, query });
+    const data = await fetchOrdersPageWithRetry(cursor, query);
     const orders = data.orders.edges.map((edge) => edge.node);
 
     await upsertOrders(supabase, orders);
@@ -404,6 +515,34 @@ async function run() {
   }
 
   console.log(`PD Shopify ${mode} sync complete. Imported ${importedOrders} orders.`);
+}
+
+async function fetchOrdersPageWithRetry(cursor, query) {
+  try {
+    return await shopifyGraphQL(
+      ORDERS_QUERY,
+      { cursor, query },
+      { allowProductScopeFallback: true }
+    );
+  } catch (error) {
+    if (!isTransientShopifyError(error)) {
+      throw error;
+    }
+
+    console.warn(
+      `Transient PD Shopify response. Waiting 5 seconds and retrying page: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+    cachedAccessToken = null;
+    await sleep(5000);
+
+    return shopifyGraphQL(
+      ORDERS_QUERY,
+      { cursor, query },
+      { allowProductScopeFallback: true }
+    );
+  }
 }
 
 run().catch(async (error) => {
