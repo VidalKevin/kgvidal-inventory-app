@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { existsSync, readFileSync } from "node:fs";
 
 const SHOPIFY_API_VERSION = "2026-04";
 const HISTORICAL_SYNC_TYPE = "pd_orders_historical";
@@ -6,6 +7,8 @@ const INCREMENTAL_SYNC_TYPE = "pd_orders_incremental";
 const DEFAULT_START_DATE = "2025-01-01";
 
 let cachedAccessToken = null;
+
+loadDotEnvLocal();
 
 const ORDERS_QUERY = `
   query PdOrders($cursor: String, $query: String!) {
@@ -90,6 +93,33 @@ function parseArgs() {
   }
 
   return args;
+}
+
+function loadDotEnvLocal() {
+  const envPath = ".env.local";
+
+  if (!existsSync(envPath)) {
+    return;
+  }
+
+  const content = readFileSync(envPath, "utf8");
+
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+
+    if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) {
+      continue;
+    }
+
+    const separatorIndex = trimmed.indexOf("=");
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const rawValue = trimmed.slice(separatorIndex + 1).trim();
+    const value = rawValue.replace(/^['"]|['"]$/g, "");
+
+    if (key && process.env[key] == null) {
+      process.env[key] = value;
+    }
+  }
 }
 
 function requiredEnv(name) {
