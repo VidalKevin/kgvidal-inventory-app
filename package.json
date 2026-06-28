@@ -10,7 +10,8 @@
     "deploy": "opennextjs-cloudflare build",
     "sync:shiphero-intransit": "node scripts/sync-shiphero-intransit.mjs",
     "sync:shiphero-onhold": "node scripts/sync-shiphero-onhold.mjs",
-    "db:vendor-settings": "node scripts/apply-vendor-settings-migration.mjs"
+    "db:vendor-settings": "node scripts/apply-vendor-settings-migration.mjs",
+    "auth:admin-sql": "node scripts/generate-app-admin-sql.mjs"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.19.11",
