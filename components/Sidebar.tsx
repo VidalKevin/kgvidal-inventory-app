@@ -9,6 +9,7 @@ import {
   ClipboardList,
   CalendarDays,
   CalendarRange,
+  BarChart3,
   Folder,
   FileX2,
   PackageCheck,
@@ -67,6 +68,7 @@ const menuItems: MenuItem[] = [
     ],
   },
   { label: "Monthly Reports", href: "/reports/monthly", icon: CalendarRange },
+  { label: "PD Analytics", href: "/pd-analytics", icon: BarChart3 },
   {
     label: "Files",
     icon: Folder,
