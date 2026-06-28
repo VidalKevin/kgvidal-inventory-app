@@ -159,7 +159,7 @@ export function summarizePdData(orders: PdOrderWithItems[]) {
   let grossSales = 0;
   let giftCardsRedeemed = 0;
   let internationalGrossSales = 0;
-  let vendorGrossSales = 0;
+  let vidalGrossSales = 0;
 
   for (const order of orders) {
     const filteredItemGross = order.items.reduce(
@@ -176,7 +176,11 @@ export function summarizePdData(orders: PdOrderWithItems[]) {
       internationalGrossSales += orderGross;
     }
 
-    vendorGrossSales += filteredItemGross;
+    vidalGrossSales += order.items.reduce((total, item) => {
+      return item.vendor?.trim().toLowerCase() === "vidal"
+        ? total + numericValue(item.gross_sales)
+        : total;
+    }, 0);
   }
 
   const totalOrders = orders.length;
@@ -187,7 +191,8 @@ export function summarizePdData(orders: PdOrderWithItems[]) {
     averageOrderValue: totalOrders > 0 ? grossSales / totalOrders : 0,
     giftCardsRedeemed,
     internationalGrossSales,
-    vendorGrossSales,
+    vidalGrossSales,
+    vendorGrossSales: vidalGrossSales,
   };
 }
 
@@ -212,6 +217,7 @@ export function salesByProduct(orders: PdOrderWithItems[]) {
     {
       productTitle: string;
       sku: string;
+      vendor: string;
       quantitySold: number;
       orderCount: number;
       grossSales: number;
@@ -223,12 +229,14 @@ export function salesByProduct(orders: PdOrderWithItems[]) {
     for (const item of order.items) {
       const sku = item.sku || "";
       const productTitle = item.product_title || "Unassigned";
-      const key = `${sku}::${productTitle}`;
+      const vendor = item.vendor || "";
+      const key = `${sku}::${productTitle}::${vendor}`;
       const current =
         grouped.get(key) ??
         {
           productTitle,
           sku,
+          vendor,
           quantitySold: 0,
           orderCount: 0,
           grossSales: 0,
@@ -247,6 +255,7 @@ export function salesByProduct(orders: PdOrderWithItems[]) {
     [...grouped.values()].map((row) => ({
       productTitle: row.productTitle,
       sku: row.sku,
+      vendor: row.vendor,
       quantitySold: row.quantitySold,
       orderCount: row.orderCount,
       grossSales: row.grossSales,
