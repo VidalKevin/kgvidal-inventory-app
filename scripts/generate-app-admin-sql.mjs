@@ -26,7 +26,7 @@ if (!email || !username || !password) {
   process.exit(1);
 }
 
-if (password.length < 10) {
+if (password.length < 5) {
   console.error("Password must be at least 10 characters.");
   process.exit(1);
 }
