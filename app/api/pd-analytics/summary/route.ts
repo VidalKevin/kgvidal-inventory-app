@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPdSupabaseAdmin } from "@/lib/pdAnalyticsApi";
 import {
   loadPdData,
+  loadPdReturns,
   parsePdFilters,
   summarizePdData,
 } from "@/lib/pdAnalytics";
@@ -13,11 +14,14 @@ export async function GET(request: Request) {
   try {
     const filters = parsePdFilters(new URL(request.url));
     const supabase = await getPdSupabaseAdmin();
-    const orders = await loadPdData(supabase, filters);
+    const [orders, returns] = await Promise.all([
+      loadPdData(supabase, filters),
+      loadPdReturns(supabase, filters),
+    ]);
 
     return NextResponse.json({
       filters,
-      summary: summarizePdData(orders),
+      summary: summarizePdData(orders, returns),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

@@ -31,6 +31,15 @@ export type PdOrderItemRow = {
   gross_sales: number | string | null;
 };
 
+export type PdOrderReturnRow = {
+  shopify_order_id: string;
+  refund_created_at: string;
+  sku: string | null;
+  product_title: string | null;
+  quantity: number | null;
+  return_amount: number | string | null;
+};
+
 export type PdOrderWithItems = PdOrderRow & {
   items: PdOrderItemRow[];
 };
@@ -156,12 +165,58 @@ export async function loadPdData(
     .filter((order) => !itemFiltersApplied || order.items.length > 0);
 }
 
-export function summarizePdData(orders: PdOrderWithItems[]) {
+export async function loadPdReturns(
+  supabase: SupabaseClient,
+  filters: PdFilters
+): Promise<PdOrderReturnRow[]> {
+  validatePdFilters(filters);
+
+  const returnsQuery = supabase
+    .from("pd_order_returns")
+    .select(
+      "shopify_order_id,refund_created_at,sku,product_title,quantity,return_amount"
+    )
+    .gte("refund_created_at", normalizeDateStart(filters.startDate))
+    .lte("refund_created_at", normalizeDateEnd(filters.endDate));
+
+  let returns: PdOrderReturnRow[];
+
+  try {
+    returns = await fetchAll<PdOrderReturnRow>(returnsQuery);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (message.includes("pd_order_returns")) {
+      return [];
+    }
+
+    throw error;
+  }
+
+  const search = filters.search?.trim().toLowerCase();
+
+  return search
+    ? returns.filter((row) => {
+        const sku = row.sku?.toLowerCase() ?? "";
+        const title = row.product_title?.toLowerCase() ?? "";
+        return sku.includes(search) || title.includes(search);
+      })
+    : returns;
+}
+
+export function summarizePdData(
+  orders: PdOrderWithItems[],
+  returns: PdOrderReturnRow[] = []
+) {
   let grossSales = 0;
-  let netSales = 0;
+  let discountAdjustedSales = 0;
   let giftCardsRedeemed = 0;
   let internationalGrossSales = 0;
   let vidalGrossSales = 0;
+  const returnsAmount = returns.reduce(
+    (total, row) => total + numericValue(row.return_amount),
+    0
+  );
 
   for (const order of orders) {
     const filteredItemGross = order.items.reduce(
@@ -172,7 +227,7 @@ export function summarizePdData(orders: PdOrderWithItems[]) {
       order.items.length > 0 ? filteredItemGross : numericValue(order.gross_sales);
 
     grossSales += orderGross;
-    netSales += numericValue(order.net_sales);
+    discountAdjustedSales += numericValue(order.net_sales);
     giftCardsRedeemed += numericValue(order.gift_card_amount);
 
     if (isInternationalCountry(order.shipping_country)) {
@@ -187,6 +242,7 @@ export function summarizePdData(orders: PdOrderWithItems[]) {
   }
 
   const totalOrders = orders.length;
+  const netSales = Math.max(discountAdjustedSales - returnsAmount, 0);
 
   return {
     grossSales,

@@ -55,6 +55,27 @@ const ORDERS_QUERY = `
               amount
             }
           }
+          refunds(first: 50) {
+            id
+            createdAt
+            refundLineItems(first: 250) {
+              edges {
+                node {
+                  id
+                  quantity
+                  subtotalSet {
+                    shopMoney {
+                      amount
+                    }
+                  }
+                  lineItem {
+                    sku
+                    title
+                  }
+                }
+              }
+            }
+          }
           transactions(first: 100) {
             gateway
             formattedGateway
@@ -137,6 +158,27 @@ const ORDERS_QUERY_WITHOUT_PRODUCT = `
           totalRefundedSet {
             shopMoney {
               amount
+            }
+          }
+          refunds(first: 50) {
+            id
+            createdAt
+            refundLineItems(first: 250) {
+              edges {
+                node {
+                  id
+                  quantity
+                  subtotalSet {
+                    shopMoney {
+                      amount
+                    }
+                  }
+                  lineItem {
+                    sku
+                    title
+                  }
+                }
+              }
             }
           }
           transactions(first: 100) {
@@ -368,12 +410,7 @@ function orderGross(order) {
 }
 
 function orderNet(order) {
-  return Math.max(
-    orderGross(order) -
-      moneyValue(order.totalDiscountsSet) -
-      moneyValue(order.totalRefundedSet),
-    0
-  );
+  return Math.max(orderGross(order) - moneyValue(order.totalDiscountsSet), 0);
 }
 
 function giftCardAmount(order) {
@@ -431,6 +468,30 @@ function itemRows(order) {
   });
 }
 
+function refundRows(order) {
+  const orderId = shopifyId(order.id);
+
+  return (order.refunds ?? []).flatMap((refund) => {
+    const refundId = shopifyId(refund.id);
+
+    return refund.refundLineItems.edges.map((edge) => {
+      const refundItem = edge.node;
+
+      return {
+        shopify_order_id: orderId,
+        order_number: order.name,
+        shopify_refund_id: refundId,
+        shopify_refund_line_item_id: shopifyId(refundItem.id),
+        refund_created_at: refund.createdAt,
+        sku: refundItem.lineItem?.sku ?? null,
+        product_title: refundItem.lineItem?.title ?? null,
+        quantity: Number(refundItem.quantity ?? 0),
+        return_amount: roundMoney(moneyValue(refundItem.subtotalSet)),
+      };
+    });
+  });
+}
+
 function roundMoney(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
 }
@@ -479,17 +540,34 @@ async function upsertOrders(supabase, orders) {
   }
 
   const items = orders.flatMap(itemRows);
+  const refunds = orders.flatMap(refundRows);
 
   if (items.length === 0) {
+    if (refunds.length === 0) {
+      return;
+    }
+  } else {
+    const { error: itemsError } = await supabase.from("pd_order_items").upsert(items, {
+      onConflict: "shopify_line_item_id",
+    });
+
+    if (itemsError) {
+      throw new Error(itemsError.message);
+    }
+  }
+
+  if (refunds.length === 0) {
     return;
   }
 
-  const { error: itemsError } = await supabase.from("pd_order_items").upsert(items, {
-    onConflict: "shopify_line_item_id",
-  });
+  const { error: refundsError } = await supabase
+    .from("pd_order_returns")
+    .upsert(refunds, {
+      onConflict: "shopify_refund_line_item_id",
+    });
 
-  if (itemsError) {
-    throw new Error(itemsError.message);
+  if (refundsError) {
+    throw new Error(refundsError.message);
   }
 }
 
