@@ -35,7 +35,7 @@ function isAuthorized(request: Request, env: EnvMap) {
   const cronSecret = env.CRON_SECRET;
 
   if (!cronSecret) {
-    return true;
+    return false;
   }
 
   const authorization = request.headers.get("authorization") ?? "";
