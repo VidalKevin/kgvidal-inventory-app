@@ -5,6 +5,8 @@ const HISTORICAL_SYNC_TYPE = "pd_orders_historical";
 const INCREMENTAL_SYNC_TYPE = "pd_orders_incremental";
 const DEFAULT_START_DATE = "2025-01-01";
 
+let cachedAccessToken = null;
+
 const ORDERS_QUERY = `
   query PdOrders($cursor: String, $query: String!) {
     orders(first: 50, after: $cursor, query: $query, sortKey: PROCESSED_AT) {
@@ -100,6 +102,10 @@ function requiredEnv(name) {
   return value;
 }
 
+function optionalEnv(name) {
+  return process.env[name]?.trim() || "";
+}
+
 function getSupabase() {
   return createClient(
     requiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
@@ -115,7 +121,7 @@ function getSupabase() {
 
 async function shopifyGraphQL(query, variables) {
   const storeDomain = requiredEnv("SHOPIFY_PD_STORE_DOMAIN");
-  const accessToken = requiredEnv("SHOPIFY_PD_ADMIN_ACCESS_TOKEN");
+  const accessToken = await getShopifyAccessToken(storeDomain);
   const response = await fetch(
     `https://${storeDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
     {
@@ -136,6 +142,41 @@ async function shopifyGraphQL(query, variables) {
   }
 
   return result.data;
+}
+
+async function getShopifyAccessToken(storeDomain) {
+  if (cachedAccessToken) {
+    return cachedAccessToken;
+  }
+
+  const adminAccessToken = optionalEnv("SHOPIFY_PD_ADMIN_ACCESS_TOKEN");
+
+  if (adminAccessToken) {
+    cachedAccessToken = adminAccessToken;
+    return cachedAccessToken;
+  }
+
+  const clientId = requiredEnv("SHOPIFY_PD_CLIENT_ID");
+  const clientSecret = requiredEnv("SHOPIFY_PD_CLIENT_SECRET");
+  const response = await fetch(`https://${storeDomain}/admin/oauth/access_token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: clientId,
+      client_secret: clientSecret,
+    }),
+  });
+  const data = await response.json();
+
+  if (!response.ok || !data.access_token) {
+    throw new Error(`Practitioner Depot Shopify token error: ${JSON.stringify(data)}`);
+  }
+
+  cachedAccessToken = data.access_token;
+  return cachedAccessToken;
 }
 
 function moneyValue(moneySet) {
