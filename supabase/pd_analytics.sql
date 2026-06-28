@@ -9,6 +9,7 @@ create table if not exists public.pd_orders (
   updated_at timestamptz,
   shipping_country text,
   gross_sales numeric(12, 2) not null default 0,
+  net_sales numeric(12, 2) not null default 0,
   gift_card_amount numeric(12, 2) not null default 0,
   raw_updated_at timestamptz
 );
@@ -38,6 +39,9 @@ create table if not exists public.pd_sync_state (
 
 create index if not exists pd_orders_processed_at_idx on public.pd_orders(processed_at);
 create index if not exists pd_orders_shipping_country_idx on public.pd_orders(shipping_country);
+
+alter table public.pd_orders
+add column if not exists net_sales numeric(12, 2) not null default 0;
 
 create index if not exists pd_order_items_processed_at_idx on public.pd_order_items(processed_at);
 create index if not exists pd_order_items_sku_idx on public.pd_order_items(sku);

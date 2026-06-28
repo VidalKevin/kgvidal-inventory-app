@@ -35,7 +35,22 @@ const ORDERS_QUERY = `
               amount
             }
           }
+          currentTotalDiscountsSet {
+            shopMoney {
+              amount
+            }
+          }
           subtotalPriceSet {
+            shopMoney {
+              amount
+            }
+          }
+          totalDiscountsSet {
+            shopMoney {
+              amount
+            }
+          }
+          totalRefundedSet {
             shopMoney {
               amount
             }
@@ -104,7 +119,22 @@ const ORDERS_QUERY_WITHOUT_PRODUCT = `
               amount
             }
           }
+          currentTotalDiscountsSet {
+            shopMoney {
+              amount
+            }
+          }
           subtotalPriceSet {
+            shopMoney {
+              amount
+            }
+          }
+          totalDiscountsSet {
+            shopMoney {
+              amount
+            }
+          }
+          totalRefundedSet {
             shopMoney {
               amount
             }
@@ -337,6 +367,15 @@ function orderGross(order) {
   return lineGross || moneyValue(order.subtotalPriceSet) || moneyValue(order.currentSubtotalPriceSet);
 }
 
+function orderNet(order) {
+  return Math.max(
+    orderGross(order) -
+      moneyValue(order.totalDiscountsSet) -
+      moneyValue(order.totalRefundedSet),
+    0
+  );
+}
+
 function giftCardAmount(order) {
   return order.transactions.reduce((total, transaction) => {
     const gateway = `${transaction.gateway ?? ""} ${transaction.formattedGateway ?? ""}`.toLowerCase();
@@ -365,6 +404,7 @@ function orderRow(order) {
     updated_at: order.updatedAt,
     shipping_country: shippingCountry(order),
     gross_sales: roundMoney(orderGross(order)),
+    net_sales: roundMoney(orderNet(order)),
     gift_card_amount: roundMoney(giftCardAmount(order)),
     raw_updated_at: order.updatedAt,
   };

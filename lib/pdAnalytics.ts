@@ -15,6 +15,7 @@ export type PdOrderRow = {
   processed_at: string;
   shipping_country: string | null;
   gross_sales: number | string | null;
+  net_sales: number | string | null;
   gift_card_amount: number | string | null;
 };
 
@@ -84,7 +85,7 @@ export async function loadPdData(
   let ordersQuery = supabase
     .from("pd_orders")
     .select(
-      "shopify_order_id,order_number,processed_at,shipping_country,gross_sales,gift_card_amount"
+      "shopify_order_id,order_number,processed_at,shipping_country,gross_sales,net_sales,gift_card_amount"
     )
     .gte("processed_at", normalizeDateStart(filters.startDate))
     .lte("processed_at", normalizeDateEnd(filters.endDate))
@@ -157,6 +158,7 @@ export async function loadPdData(
 
 export function summarizePdData(orders: PdOrderWithItems[]) {
   let grossSales = 0;
+  let netSales = 0;
   let giftCardsRedeemed = 0;
   let internationalGrossSales = 0;
   let vidalGrossSales = 0;
@@ -170,6 +172,7 @@ export function summarizePdData(orders: PdOrderWithItems[]) {
       order.items.length > 0 ? filteredItemGross : numericValue(order.gross_sales);
 
     grossSales += orderGross;
+    netSales += numericValue(order.net_sales);
     giftCardsRedeemed += numericValue(order.gift_card_amount);
 
     if (isInternationalCountry(order.shipping_country)) {
@@ -187,8 +190,9 @@ export function summarizePdData(orders: PdOrderWithItems[]) {
 
   return {
     grossSales,
+    netSales,
     totalOrders,
-    averageOrderValue: totalOrders > 0 ? grossSales / totalOrders : 0,
+    averageOrderValue: totalOrders > 0 ? netSales / totalOrders : 0,
     giftCardsRedeemed,
     internationalGrossSales,
     vidalGrossSales,

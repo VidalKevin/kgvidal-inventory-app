@@ -6,6 +6,7 @@ import PageTitle from "@/components/PageTitle";
 
 type Summary = {
   grossSales: number;
+  netSales: number;
   totalOrders: number;
   averageOrderValue: number;
   giftCardsRedeemed: number;
@@ -228,6 +229,7 @@ export default function PdAnalyticsPage() {
 
   const cards = [
     ["Gross Sales", formatCurrency(summary?.grossSales)],
+    ["Net Sales", formatCurrency(summary?.netSales)],
     ["Orders", formatNumber(summary?.totalOrders)],
     ["Average Order Value", formatCurrency(summary?.averageOrderValue)],
     ["Gift Cards Redeemed", formatCurrency(summary?.giftCardsRedeemed)],
