@@ -76,8 +76,6 @@ export type InventoryForecastClientRow = {
   uom: number;
 };
 
-const SUPABASE_PAGE_SIZE = 1000;
-
 function normalizeKey(value: string) {
   return value.trim().toLowerCase();
 }
@@ -104,18 +102,6 @@ export function getBusinessDateString(date = new Date()) {
 
 export function getBusinessDateDaysAgo(days: number) {
   const date = new Date(`${getBusinessDateString()}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() - days);
-
-  return date.toISOString().slice(0, 10);
-}
-
-function getDateDaysBefore(dateValue: string, days: number) {
-  const date = new Date(`${dateValue}T00:00:00.000Z`);
-
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
   date.setUTCDate(date.getUTCDate() - days);
 
   return date.toISOString().slice(0, 10);
@@ -248,70 +234,52 @@ export async function fetchPd90DaySalesBySku(
   supabaseAdmin: SupabaseClient,
   snapshotDate: string
 ) {
-  const startDate = getDateDaysBefore(snapshotDate, 90);
+  const endDate = new Date(`${snapshotDate}T00:00:00.000Z`);
   const salesBySku = new Map<string, number>();
 
-  if (!startDate) {
+  if (Number.isNaN(endDate.getTime())) {
     return salesBySku;
   }
 
-  const data = await fetchAllSupabaseRows<PdOrderItemSaleRow>(
-    supabaseAdmin
+  const startDate = new Date(endDate);
+  startDate.setUTCDate(startDate.getUTCDate() - 90);
+
+  const pageSize = 1000;
+  let from = 0;
+
+  for (;;) {
+    const to = from + pageSize - 1;
+    const { data, error } = await supabaseAdmin
       .from("pd_order_items")
       .select("sku, quantity")
-      .gte("processed_at", `${startDate}T00:00:00.000Z`)
-      .lte("processed_at", `${snapshotDate}T23:59:59.999Z`),
-    "Supabase PD analytics item sales fetch failed"
-  );
+      .gte("processed_at", `${startDate.toISOString().slice(0, 10)}T00:00:00.000Z`)
+      .lte("processed_at", `${snapshotDate}T23:59:59.999Z`)
+      .range(from, to);
 
-  // Days of Inventory uses gross PD quantity sold by SKU. Financial returns are
-  // handled in PD Analytics net sales, but should not reduce inventory demand.
-  for (const row of data) {
-    const skuKey = normalizeKey(String(row.sku ?? ""));
-
-    if (!skuKey) {
-      continue;
+    if (error) {
+      throw new Error(`Supabase PD 90 day sale fetch failed: ${error.message}`);
     }
 
-    salesBySku.set(skuKey, (salesBySku.get(skuKey) ?? 0) + Number(row.quantity ?? 0));
+    const rows = (data ?? []) as PdOrderItemSaleRow[];
+
+    for (const row of rows) {
+      const skuKey = normalizeKey(String(row.sku ?? ""));
+
+      if (!skuKey) {
+        continue;
+      }
+
+      salesBySku.set(skuKey, (salesBySku.get(skuKey) ?? 0) + Number(row.quantity ?? 0));
+    }
+
+    if (rows.length < pageSize) {
+      break;
+    }
+
+    from += pageSize;
   }
 
   return salesBySku;
-}
-
-async function fetchAllSupabaseRows<T>(
-  query: {
-    range: (
-      from: number,
-      to: number
-    ) => PromiseLike<{
-      data: T[] | null;
-      error: { message: string } | null;
-    }>;
-  },
-  errorPrefix: string
-) {
-  const rows: T[] = [];
-  let from = 0;
-
-  while (true) {
-    const { data, error } = await query.range(
-      from,
-      from + SUPABASE_PAGE_SIZE - 1
-    );
-
-    if (error) {
-      throw new Error(`${errorPrefix}: ${error.message}`);
-    }
-
-    rows.push(...(data ?? []));
-
-    if (!data || data.length < SUPABASE_PAGE_SIZE) {
-      return rows;
-    }
-
-    from += SUPABASE_PAGE_SIZE;
-  }
 }
 
 export async function fetchShipheroOnOrderBySku(
