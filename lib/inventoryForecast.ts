@@ -23,8 +23,13 @@ export type ItemMasterRow = {
   uom: string | null;
 };
 
-type Pd90DaySaleRow = {
-  product_variant_sku: string | null;
+type PdOrderItemSaleRow = {
+  sku: string | null;
+  quantity: number | null;
+};
+
+type PdOrderReturnSaleRow = {
+  sku: string | null;
   quantity: number | null;
 };
 
@@ -76,6 +81,8 @@ export type InventoryForecastClientRow = {
   uom: number;
 };
 
+const SUPABASE_PAGE_SIZE = 1000;
+
 function normalizeKey(value: string) {
   return value.trim().toLowerCase();
 }
@@ -107,24 +114,14 @@ export function getBusinessDateDaysAgo(days: number) {
   return date.toISOString().slice(0, 10);
 }
 
-function getPdWeekStart(snapshotDate: string) {
-  const date = new Date(`${snapshotDate}T00:00:00.000Z`);
+function getDateDaysBefore(dateValue: string, days: number) {
+  const date = new Date(`${dateValue}T00:00:00.000Z`);
 
   if (Number.isNaN(date.getTime())) {
     return null;
   }
 
-  const firstPdDate = Date.UTC(2026, 5, 8);
-  const lastPdDate = Date.UTC(2026, 7, 31);
-  const snapshotTime = date.getTime();
-
-  if (snapshotTime < firstPdDate || snapshotTime > lastPdDate) {
-    return null;
-  }
-
-  const day = date.getUTCDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  date.setUTCDate(date.getUTCDate() + mondayOffset);
+  date.setUTCDate(date.getUTCDate() - days);
 
   return date.toISOString().slice(0, 10);
 }
@@ -256,24 +253,24 @@ export async function fetchPd90DaySalesBySku(
   supabaseAdmin: SupabaseClient,
   snapshotDate: string
 ) {
-  const weekStart = getPdWeekStart(snapshotDate);
+  const startDate = getDateDaysBefore(snapshotDate, 90);
   const salesBySku = new Map<string, number>();
 
-  if (!weekStart) {
+  if (!startDate) {
     return salesBySku;
   }
 
-  const { data, error } = await supabaseAdmin
-    .from("pd_90_day_sale")
-    .select("product_variant_sku, quantity")
-    .eq("week_start", weekStart);
+  const data = await fetchAllSupabaseRows<PdOrderItemSaleRow>(
+    supabaseAdmin
+      .from("pd_order_items")
+      .select("sku, quantity")
+      .gte("processed_at", `${startDate}T00:00:00.000Z`)
+      .lte("processed_at", `${snapshotDate}T23:59:59.999Z`),
+    "Supabase PD analytics item sales fetch failed"
+  );
 
-  if (error) {
-    throw new Error(`Supabase PD 90 day sale fetch failed: ${error.message}`);
-  }
-
-  for (const row of (data ?? []) as Pd90DaySaleRow[]) {
-    const skuKey = normalizeKey(String(row.product_variant_sku ?? ""));
+  for (const row of data) {
+    const skuKey = normalizeKey(String(row.sku ?? ""));
 
     if (!skuKey) {
       continue;
@@ -282,7 +279,75 @@ export async function fetchPd90DaySalesBySku(
     salesBySku.set(skuKey, (salesBySku.get(skuKey) ?? 0) + Number(row.quantity ?? 0));
   }
 
+  let returns: PdOrderReturnSaleRow[] = [];
+
+  try {
+    returns = await fetchAllSupabaseRows<PdOrderReturnSaleRow>(
+      supabaseAdmin
+        .from("pd_order_returns")
+        .select("sku, quantity")
+        .gte("refund_created_at", `${startDate}T00:00:00.000Z`)
+        .lte("refund_created_at", `${snapshotDate}T23:59:59.999Z`),
+      "Supabase PD analytics return sales fetch failed"
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const missingReturnsTable =
+      message.toLowerCase().includes("does not exist") ||
+      message.toLowerCase().includes("schema cache");
+
+    if (!missingReturnsTable) {
+      throw error;
+    }
+  }
+
+  for (const row of returns) {
+    const skuKey = normalizeKey(String(row.sku ?? ""));
+
+    if (!skuKey) {
+      continue;
+    }
+
+    const netQuantity = (salesBySku.get(skuKey) ?? 0) - Number(row.quantity ?? 0);
+    salesBySku.set(skuKey, Math.max(netQuantity, 0));
+  }
+
   return salesBySku;
+}
+
+async function fetchAllSupabaseRows<T>(
+  query: {
+    range: (
+      from: number,
+      to: number
+    ) => PromiseLike<{
+      data: T[] | null;
+      error: { message: string } | null;
+    }>;
+  },
+  errorPrefix: string
+) {
+  const rows: T[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await query.range(
+      from,
+      from + SUPABASE_PAGE_SIZE - 1
+    );
+
+    if (error) {
+      throw new Error(`${errorPrefix}: ${error.message}`);
+    }
+
+    rows.push(...(data ?? []));
+
+    if (!data || data.length < SUPABASE_PAGE_SIZE) {
+      return rows;
+    }
+
+    from += SUPABASE_PAGE_SIZE;
+  }
 }
 
 export async function fetchShipheroOnOrderBySku(
