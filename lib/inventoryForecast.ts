@@ -28,11 +28,6 @@ type PdOrderItemSaleRow = {
   quantity: number | null;
 };
 
-type PdOrderReturnSaleRow = {
-  sku: string | null;
-  quantity: number | null;
-};
-
 type ShipheroIntransitRow = {
   sku: string | null;
   quantity: number | null;
@@ -269,6 +264,8 @@ export async function fetchPd90DaySalesBySku(
     "Supabase PD analytics item sales fetch failed"
   );
 
+  // Days of Inventory uses gross PD quantity sold by SKU. Financial returns are
+  // handled in PD Analytics net sales, but should not reduce inventory demand.
   for (const row of data) {
     const skuKey = normalizeKey(String(row.sku ?? ""));
 
@@ -277,39 +274,6 @@ export async function fetchPd90DaySalesBySku(
     }
 
     salesBySku.set(skuKey, (salesBySku.get(skuKey) ?? 0) + Number(row.quantity ?? 0));
-  }
-
-  let returns: PdOrderReturnSaleRow[] = [];
-
-  try {
-    returns = await fetchAllSupabaseRows<PdOrderReturnSaleRow>(
-      supabaseAdmin
-        .from("pd_order_returns")
-        .select("sku, quantity")
-        .gte("refund_created_at", `${startDate}T00:00:00.000Z`)
-        .lte("refund_created_at", `${snapshotDate}T23:59:59.999Z`),
-      "Supabase PD analytics return sales fetch failed"
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const missingReturnsTable =
-      message.toLowerCase().includes("does not exist") ||
-      message.toLowerCase().includes("schema cache");
-
-    if (!missingReturnsTable) {
-      throw error;
-    }
-  }
-
-  for (const row of returns) {
-    const skuKey = normalizeKey(String(row.sku ?? ""));
-
-    if (!skuKey) {
-      continue;
-    }
-
-    const netQuantity = (salesBySku.get(skuKey) ?? 0) - Number(row.quantity ?? 0);
-    salesBySku.set(skuKey, Math.max(netQuantity, 0));
   }
 
   return salesBySku;
