@@ -43,6 +43,23 @@ function isCronRequest(request: NextRequest) {
   return authorization === `Bearer ${cronSecret}` || urlSecret === cronSecret;
 }
 
+function isMachineSyncRequest(request: NextRequest) {
+  if (request.nextUrl.pathname !== "/api/sync/shopify-inventory") {
+    return false;
+  }
+
+  const cronSecret = process.env.CRON_SECRET;
+
+  if (!cronSecret) {
+    return false;
+  }
+
+  const authorization = request.headers.get("authorization") ?? "";
+  const urlSecret = request.nextUrl.searchParams.get("secret");
+
+  return authorization === `Bearer ${cronSecret}` || urlSecret === cronSecret;
+}
+
 async function sign(payload: string, secret: string) {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -98,7 +115,7 @@ async function verifySession(request: NextRequest) {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (isPublicPath(pathname) || isCronRequest(request)) {
+  if (isPublicPath(pathname) || isCronRequest(request) || isMachineSyncRequest(request)) {
     return NextResponse.next();
   }
 

@@ -67,7 +67,12 @@ export async function GET(request: Request) {
 
     const syncResponse = await fetch(
       `${new URL(request.url).origin}/api/sync/shopify-inventory`,
-      { cache: "no-store" }
+      {
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${env.CRON_SECRET}`,
+        },
+      }
     );
 
     const syncResult = (await syncResponse.json()) as SyncResult;

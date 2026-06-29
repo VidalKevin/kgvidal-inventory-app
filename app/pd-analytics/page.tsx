@@ -38,6 +38,7 @@ type SyncStateRow = {
 };
 
 type ActiveTab = "summary" | "variants";
+type DateRangePreset = "last30" | "last90" | "custom";
 
 function dateInputDaysAgo(days: number) {
   const date = new Date();
@@ -135,37 +136,81 @@ export default function PdAnalyticsPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("summary");
   const [startDate, setStartDate] = useState(dateInputDaysAgo(30));
   const [endDate, setEndDate] = useState(dateInputDaysAgo(0));
+  const [dateRangePreset, setDateRangePreset] =
+    useState<DateRangePreset>("last30");
+  const [customStartDate, setCustomStartDate] = useState(dateInputDaysAgo(30));
+  const [customEndDate, setCustomEndDate] = useState(dateInputDaysAgo(0));
   const [summary, setSummary] = useState<Summary | null>(null);
   const [productTypes, setProductTypes] = useState<ProductTypeRow[]>([]);
   const [products, setProducts] = useState<ProductRow[]>([]);
+  const [variantSearch, setVariantSearch] = useState("");
   const [syncState, setSyncState] = useState<SyncStateRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const queryString = useMemo(() => {
-    return new URLSearchParams({ startDate, endDate }).toString();
-  }, [endDate, startDate]);
 
   const suppOnlySales =
     getProductTypeSales(productTypes, "Nutraceutical") +
     getProductTypeSales(productTypes, "Nutraceuticals");
   const bondiSales = getBondiSales(products);
-  const variantRows = products.map((row) => ({
-    productTitle: row.productTitle,
-    variantTitle: "Default Title",
-    sku: row.sku,
-    mfg: row.vendor ?? "",
-    currentQty: row.quantitySold,
-  }));
+  const variantRows = useMemo(
+    () =>
+      products.map((row) => ({
+        productTitle: row.productTitle,
+        variantTitle: "Default Title",
+        sku: row.sku,
+        mfg: row.vendor ?? "",
+        currentQty: row.quantitySold,
+      })),
+    [products]
+  );
+  const filteredVariantRows = useMemo(() => {
+    const search = variantSearch.trim().toLowerCase();
+
+    if (!search) {
+      return variantRows;
+    }
+
+    return variantRows.filter((row) => {
+      const product = row.productTitle.toLowerCase();
+      const variant = row.variantTitle.toLowerCase();
+      return product.includes(search) || variant.includes(search);
+    });
+  }, [variantRows, variantSearch]);
+
+  function resolveDateRange() {
+    if (dateRangePreset === "custom") {
+      return {
+        nextStartDate: customStartDate,
+        nextEndDate: customEndDate,
+      };
+    }
+
+    return {
+      nextStartDate: dateInputDaysAgo(dateRangePreset === "last90" ? 90 : 30),
+      nextEndDate: dateInputDaysAgo(0),
+    };
+  }
 
   async function loadAnalytics() {
+    const { nextStartDate, nextEndDate } = resolveDateRange();
+    const nextQueryString = new URLSearchParams({
+      startDate: nextStartDate,
+      endDate: nextEndDate,
+    }).toString();
+
+    setStartDate(nextStartDate);
+    setEndDate(nextEndDate);
     setLoading(true);
     setError(null);
 
     try {
       const [summaryResponse, productsResponse, statusResponse] = await Promise.all([
-        fetch(`/api/pd-analytics/summary?${queryString}`, { cache: "no-store" }),
-        fetch(`/api/pd-analytics/products?${queryString}`, { cache: "no-store" }),
+        fetch(`/api/pd-analytics/summary?${nextQueryString}`, {
+          cache: "no-store",
+        }),
+        fetch(`/api/pd-analytics/products?${nextQueryString}`, {
+          cache: "no-store",
+        }),
         fetch("/api/pd-analytics/sync-status", { cache: "no-store" }),
       ]);
 
@@ -272,24 +317,43 @@ export default function PdAnalyticsPage() {
       <div className="mb-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-end gap-3">
           <label className="text-xs font-medium text-slate-700">
-            From
-            <input
-              type="date"
-              value={startDate}
-              onChange={(event) => setStartDate(event.target.value)}
-              className="mt-1 h-9 w-40 rounded-md border border-slate-300 px-2 text-sm"
-            />
+            Date range
+            <select
+              value={dateRangePreset}
+              onChange={(event) =>
+                setDateRangePreset(event.target.value as DateRangePreset)
+              }
+              className="mt-1 h-9 w-44 rounded-md border border-slate-300 bg-white px-2 text-sm"
+            >
+              <option value="last30">Last 30 days</option>
+              <option value="last90">Last 90 days</option>
+              <option value="custom">Custom date</option>
+            </select>
           </label>
 
-          <label className="text-xs font-medium text-slate-700">
-            To
-            <input
-              type="date"
-              value={endDate}
-              onChange={(event) => setEndDate(event.target.value)}
-              className="mt-1 h-9 w-40 rounded-md border border-slate-300 px-2 text-sm"
-            />
-          </label>
+          {dateRangePreset === "custom" ? (
+            <>
+              <label className="text-xs font-medium text-slate-700">
+                From
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(event) => setCustomStartDate(event.target.value)}
+                  className="mt-1 h-9 w-40 rounded-md border border-slate-300 px-2 text-sm"
+                />
+              </label>
+
+              <label className="text-xs font-medium text-slate-700">
+                To
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(event) => setCustomEndDate(event.target.value)}
+                  className="mt-1 h-9 w-40 rounded-md border border-slate-300 px-2 text-sm"
+                />
+              </label>
+            </>
+          ) : null}
 
           <button
             type="button"
@@ -420,6 +484,15 @@ export default function PdAnalyticsPage() {
             </button>
           }
         >
+          <div className="border-b border-slate-200 px-4 py-3">
+            <input
+              type="search"
+              value={variantSearch}
+              onChange={(event) => setVariantSearch(event.target.value)}
+              placeholder="Search product or variant..."
+              className="h-9 w-full max-w-sm rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
+            />
+          </div>
           <table className="w-full text-sm">
             <thead className="bg-slate-100 text-left text-xs uppercase text-slate-600">
               <tr>
@@ -431,10 +504,10 @@ export default function PdAnalyticsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {variantRows.length === 0 ? (
+              {filteredVariantRows.length === 0 ? (
                 <EmptyRow colSpan={5} />
               ) : (
-                variantRows.map((row) => (
+                filteredVariantRows.map((row) => (
                   <tr key={`${row.sku}-${row.productTitle}`}>
                     <td className="px-4 py-2">{row.productTitle}</td>
                     <td className="px-4 py-2">{row.variantTitle}</td>
