@@ -255,7 +255,7 @@ export async function GET(request: Request) {
       }
     }
 
-    if (snapshotRows[0] && hasSavedForecastColumns(snapshotRows[0])) {
+    if (!refresh && snapshotRows[0] && hasSavedForecastColumns(snapshotRows[0])) {
       const { itemBySku } = await fetchForecastMasterData(supabaseAdmin);
       const responseData = {
         snapshotDate,
