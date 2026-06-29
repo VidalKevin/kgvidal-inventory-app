@@ -248,7 +248,7 @@ export function summarizePdData(
     grossSales,
     netSales,
     totalOrders,
-    averageOrderValue: totalOrders > 0 ? netSales / totalOrders : 0,
+    averageOrderValue: totalOrders > 0 ? discountAdjustedSales / totalOrders : 0,
     giftCardsRedeemed,
     internationalGrossSales,
     vidalGrossSales,
