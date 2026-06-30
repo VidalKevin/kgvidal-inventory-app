@@ -144,8 +144,7 @@ function savedSnapshotRowsToClientRows(
 
     existing.available_quantity =
       numberValue(existing.available_quantity) + numberValue(row.available_quantity);
-    existing.current_qty =
-      numberValue(existing.current_qty) + numberValue(row.available_quantity);
+    existing.current_qty = existing.available_quantity;
   }
 
   return Array.from(grouped.values()).map((row) => ({

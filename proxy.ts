@@ -11,6 +11,7 @@ const PUBLIC_PATHS = [
   "/login",
   "/api/auth/login",
   "/api/auth/logout",
+  "/api/shopify/sales-90-day",
 ];
 
 function getSessionSecret() {
