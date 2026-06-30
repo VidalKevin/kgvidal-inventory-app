@@ -23,8 +23,8 @@ export type ItemMasterRow = {
   uom: string | null;
 };
 
-type PdOrderItemSaleRow = {
-  sku: string | null;
+type Pd90DaySaleRow = {
+  product_variant_sku: string | null;
   quantity: number | null;
 };
 
@@ -103,6 +103,28 @@ export function getBusinessDateString(date = new Date()) {
 export function getBusinessDateDaysAgo(days: number) {
   const date = new Date(`${getBusinessDateString()}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() - days);
+
+  return date.toISOString().slice(0, 10);
+}
+
+function getPdWeekStart(snapshotDate: string) {
+  const date = new Date(`${snapshotDate}T00:00:00.000Z`);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  const firstPdDate = Date.UTC(2026, 5, 8);
+  const lastPdDate = Date.UTC(2026, 7, 31);
+  const snapshotTime = date.getTime();
+
+  if (snapshotTime < firstPdDate || snapshotTime > lastPdDate) {
+    return null;
+  }
+
+  const day = date.getUTCDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  date.setUTCDate(date.getUTCDate() + mondayOffset);
 
   return date.toISOString().slice(0, 10);
 }
@@ -234,49 +256,30 @@ export async function fetchPd90DaySalesBySku(
   supabaseAdmin: SupabaseClient,
   snapshotDate: string
 ) {
-  const endDate = new Date(`${snapshotDate}T00:00:00.000Z`);
+  const weekStart = getPdWeekStart(snapshotDate);
   const salesBySku = new Map<string, number>();
 
-  if (Number.isNaN(endDate.getTime())) {
+  if (!weekStart) {
     return salesBySku;
   }
 
-  const startDate = new Date(endDate);
-  startDate.setUTCDate(startDate.getUTCDate() - 90);
+  const { data, error } = await supabaseAdmin
+    .from("pd_90_day_sale")
+    .select("product_variant_sku, quantity")
+    .eq("week_start", weekStart);
 
-  const pageSize = 1000;
-  let from = 0;
+  if (error) {
+    throw new Error(`Supabase PD 90 day sale fetch failed: ${error.message}`);
+  }
 
-  for (;;) {
-    const to = from + pageSize - 1;
-    const { data, error } = await supabaseAdmin
-      .from("pd_order_items")
-      .select("sku, quantity")
-      .gte("processed_at", `${startDate.toISOString().slice(0, 10)}T00:00:00.000Z`)
-      .lte("processed_at", `${snapshotDate}T23:59:59.999Z`)
-      .range(from, to);
+  for (const row of (data ?? []) as Pd90DaySaleRow[]) {
+    const skuKey = normalizeKey(String(row.product_variant_sku ?? ""));
 
-    if (error) {
-      throw new Error(`Supabase PD 90 day sale fetch failed: ${error.message}`);
+    if (!skuKey) {
+      continue;
     }
 
-    const rows = (data ?? []) as PdOrderItemSaleRow[];
-
-    for (const row of rows) {
-      const skuKey = normalizeKey(String(row.sku ?? ""));
-
-      if (!skuKey) {
-        continue;
-      }
-
-      salesBySku.set(skuKey, (salesBySku.get(skuKey) ?? 0) + Number(row.quantity ?? 0));
-    }
-
-    if (rows.length < pageSize) {
-      break;
-    }
-
-    from += pageSize;
+    salesBySku.set(skuKey, (salesBySku.get(skuKey) ?? 0) + Number(row.quantity ?? 0));
   }
 
   return salesBySku;

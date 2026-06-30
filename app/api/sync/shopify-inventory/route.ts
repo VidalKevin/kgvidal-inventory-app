@@ -424,51 +424,6 @@ async function insertSnapshotRows(
   };
 }
 
-function base64UrlFromBytes(bytes: Uint8Array) {
-  let binary = "";
-
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-
-  return btoa(binary)
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replace(/=+$/g, "");
-}
-
-async function signMachineSyncPayload(payload: string, secret: string) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(payload)
-  );
-
-  return base64UrlFromBytes(new Uint8Array(signature));
-}
-
-async function createMachineSyncToken(env: EnvMap) {
-  const secret = env.CRON_SECRET || env.APP_SESSION_SECRET;
-
-  if (!secret || secret.length < 16) {
-    throw new Error(
-      "Missing CRON_SECRET or APP_SESSION_SECRET for inventory sync workflow auth."
-    );
-  }
-
-  const timestamp = Math.floor(Date.now() / 1000).toString();
-  const signature = await signMachineSyncPayload(timestamp, secret);
-
-  return `${timestamp}.${signature}`;
-}
-
 async function refreshShipheroIntransit(): Promise<ShipheroSyncResult> {
   if (process.env.VERCEL === "1") {
     return {
@@ -655,7 +610,6 @@ export async function GET(request: Request) {
         workflowId: "shiphero-intransit-inventory-sync.yml",
         inputs: {
           source: "inventory-click",
-          sync_token: await createMachineSyncToken(env),
         },
       });
 

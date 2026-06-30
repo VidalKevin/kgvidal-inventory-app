@@ -43,58 +43,6 @@ function isCronRequest(request: NextRequest) {
   return authorization === `Bearer ${cronSecret}` || urlSecret === cronSecret;
 }
 
-const MACHINE_SYNC_TOKEN_MAX_AGE_SECONDS = 60 * 60;
-
-function getMachineSyncSecret() {
-  return process.env.CRON_SECRET || process.env.APP_SESSION_SECRET || "";
-}
-
-async function verifyMachineSyncToken(token: string | null) {
-  const secret = getMachineSyncSecret();
-
-  if (!token || secret.length < 16) {
-    return false;
-  }
-
-  const [timestampText, signature] = token.split(".");
-  const timestamp = Number(timestampText);
-
-  if (!timestampText || !signature || !Number.isFinite(timestamp)) {
-    return false;
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-
-  if (
-    timestamp > now + 60 ||
-    now - timestamp > MACHINE_SYNC_TOKEN_MAX_AGE_SECONDS
-  ) {
-    return false;
-  }
-
-  const expectedSignature = await sign(timestampText, secret);
-  return timingSafeEqualText(signature, expectedSignature);
-}
-
-async function isMachineSyncRequest(request: NextRequest) {
-  if (request.nextUrl.pathname !== "/api/sync/shopify-inventory") {
-    return false;
-  }
-
-  const cronSecret = process.env.CRON_SECRET;
-  const authorization = request.headers.get("authorization") ?? "";
-  const urlSecret = request.nextUrl.searchParams.get("secret");
-  const token = request.nextUrl.searchParams.get("sync_token");
-
-  if (cronSecret) {
-    if (authorization === `Bearer ${cronSecret}` || urlSecret === cronSecret) {
-      return true;
-    }
-  }
-
-  return verifyMachineSyncToken(token);
-}
-
 async function sign(payload: string, secret: string) {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -150,11 +98,7 @@ async function verifySession(request: NextRequest) {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (
-    isPublicPath(pathname) ||
-    isCronRequest(request) ||
-    (await isMachineSyncRequest(request))
-  ) {
+  if (isPublicPath(pathname) || isCronRequest(request)) {
     return NextResponse.next();
   }
 

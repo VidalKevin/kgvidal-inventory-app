@@ -7,10 +7,6 @@ on:
         description: "What queued this sync"
         required: false
         default: "manual"
-      sync_token:
-        description: "Short-lived app-generated token for inventory sync"
-        required: false
-        default: ""
 
 jobs:
   shiphero-intransit-inventory-sync:
@@ -45,8 +41,6 @@ jobs:
       - name: Run Shopify inventory sync
         env:
           APP_URL: ${{ secrets.SHOPIFY_SYNC_APP_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          SYNC_TOKEN: ${{ github.event.inputs.sync_token }}
         run: |
           if [ -z "$APP_URL" ]; then
             echo "Missing SHOPIFY_SYNC_APP_URL secret."
@@ -54,16 +48,5 @@ jobs:
           fi
 
           endpoint="${APP_URL%/}/api/sync/shopify-inventory?skip_shiphero=1"
-          if [ -n "$SYNC_TOKEN" ]; then
-            endpoint="${endpoint}&sync_token=${SYNC_TOKEN}"
-          fi
-
-          echo "Calling Shopify inventory sync at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-
-          if [ -n "$CRON_SECRET" ]; then
-            curl --fail-with-body --show-error --silent \
-              --header "Authorization: Bearer $CRON_SECRET" \
-              "$endpoint"
-          else
-            curl --fail-with-body --show-error --silent "$endpoint"
-          fi
+          echo "Calling $endpoint at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          curl --fail-with-body --show-error --silent "$endpoint"
