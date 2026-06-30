@@ -41,12 +41,19 @@ jobs:
       - name: Run Shopify inventory sync
         env:
           APP_URL: ${{ secrets.SHOPIFY_SYNC_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           if [ -z "$APP_URL" ]; then
             echo "Missing SHOPIFY_SYNC_APP_URL secret."
             exit 1
           fi
+          if [ -z "$CRON_SECRET" ]; then
+            echo "Missing CRON_SECRET secret."
+            exit 1
+          fi
 
           endpoint="${APP_URL%/}/api/sync/shopify-inventory?skip_shiphero=1"
           echo "Calling $endpoint at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-          curl --fail-with-body --show-error --silent "$endpoint"
+          curl --fail-with-body --show-error --silent \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            "$endpoint"

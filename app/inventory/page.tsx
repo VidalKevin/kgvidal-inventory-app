@@ -1468,7 +1468,7 @@ export default function InventoryPage() {
     setSyncModalOpen(false);
 
     try {
-      const response = await fetch("/api/sync/shopify-inventory?skip_shiphero=1");
+      const response = await fetch("/api/sync/shopify-inventory");
       const data = await response.json();
 
       if (!response.ok) {
