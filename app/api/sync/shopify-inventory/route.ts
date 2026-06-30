@@ -618,7 +618,7 @@ export async function GET(request: Request) {
         queued: true,
         workflow,
         message:
-          "Inventory sync was queued in GitHub Actions. It will refresh ShipHero On Order first, then sync Shopify inventory.",
+          "Inventory sync started. It will refresh ShipHero On Order first, then sync Shopify inventory.",
       });
     } catch (error) {
       const message =

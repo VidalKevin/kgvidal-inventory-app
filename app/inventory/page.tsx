@@ -1480,7 +1480,7 @@ export default function InventoryPage() {
           type: "success",
           text:
             data.message ||
-            "Inventory sync was queued. Refresh after the workflow finishes.",
+            "Inventory sync started. Refresh after the workflow finishes.",
         });
       } else {
         setInventoryMessage({
