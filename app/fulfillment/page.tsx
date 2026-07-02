@@ -36,6 +36,16 @@ type OnHoldOrder = {
   synced_at: string | null;
 };
 
+type UnfulfilledOrder = {
+  id: number;
+  order_date: string | null;
+  order_number: string | null;
+  status: string | null;
+  days_delayed: number | null;
+  reason_for_delay: string | null;
+  synced_at: string | null;
+};
+
 function formatDate(value: string | null) {
   if (!value) {
     return "-";
@@ -95,6 +105,14 @@ export default function FulfillmentPage() {
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [unfulfilledOrders, setUnfulfilledOrders] = useState<
+    UnfulfilledOrder[]
+  >([]);
+  const [unfulfilledSyncedAt, setUnfulfilledSyncedAt] = useState<string | null>(
+    null
+  );
+  const [loadingUnfulfilled, setLoadingUnfulfilled] = useState(true);
+  const [syncingUnfulfilled, setSyncingUnfulfilled] = useState(false);
   const [syncMessage, setSyncMessage] = useState<{
     type: "success" | "error";
     text: string;
@@ -139,13 +157,46 @@ export default function FulfillmentPage() {
     }
   }, []);
 
+  const fetchUnfulfilledOrders = useCallback(async () => {
+    setLoadingUnfulfilled(true);
+
+    try {
+      const response = await fetch("/api/sync/shiphero-unfulfilled");
+      const data = (await response.json()) as {
+        orders?: UnfulfilledOrder[];
+        syncedAt?: string;
+        error?: string;
+      };
+
+      if (!response.ok || data.error) {
+        throw new Error(data.error || "Unable to load unfulfilled orders.");
+      }
+
+      setUnfulfilledOrders(data.orders ?? []);
+      setUnfulfilledSyncedAt(data.syncedAt ?? null);
+      return data.syncedAt ?? null;
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to load unfulfilled orders.";
+      setUnfulfilledOrders([]);
+      setUnfulfilledSyncedAt(null);
+      setSyncMessage({ type: "error", text: message });
+      return null;
+    } finally {
+      setLoadingUnfulfilled(false);
+    }
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void fetchOrders();
+      void fetchUnfulfilledOrders();
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [fetchOrders]);
+  }, [fetchOrders, fetchUnfulfilledOrders]);
 
   useEffect(() => {
     if (!syncModalOpen) {
@@ -244,6 +295,73 @@ export default function FulfillmentPage() {
     }
   };
 
+  const syncUnfulfilledNow = async () => {
+    setSyncingUnfulfilled(true);
+    setSyncMessage(null);
+
+    try {
+      const response = await fetch("/api/sync/shiphero-unfulfilled", {
+        method: "POST",
+      });
+      const data = (await response.json()) as {
+        success?: boolean;
+        queued?: boolean;
+        message?: string;
+        error?: string;
+        details?: string;
+      };
+
+      if (!response.ok || data.error) {
+        throw new Error(data.details || data.error || "ShipHero sync failed.");
+      }
+
+      if (data.queued) {
+        setSyncMessage({
+          type: "success",
+          text:
+            data.message ||
+            "ShipHero unfulfilled update was queued in GitHub Actions. This page will refresh when it finishes.",
+        });
+
+        const previousSyncedAt = unfulfilledSyncedAt;
+        const maxAttempts = 40;
+        const delayMs = 15000;
+
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+          const nextSyncedAt = await fetchUnfulfilledOrders();
+
+          if (nextSyncedAt && nextSyncedAt !== previousSyncedAt) {
+            setSyncMessage({
+              type: "success",
+              text: "ShipHero unfulfilled update complete. Fulfillment was refreshed.",
+            });
+            break;
+          }
+
+          if (attempt === maxAttempts - 1) {
+            setSyncMessage({
+              type: "error",
+              text: "ShipHero unfulfilled update is taking longer than expected. Check GitHub Actions, then refresh Fulfillment.",
+            });
+          }
+        }
+      } else {
+        await fetchUnfulfilledOrders();
+        setSyncMessage({
+          type: "success",
+          text: "ShipHero unfulfilled update complete.",
+        });
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "ShipHero update failed.";
+      setSyncMessage({ type: "error", text: message });
+    } finally {
+      setSyncingUnfulfilled(false);
+    }
+  };
+
   const toggleDay = (day: string) => {
     setScheduleDays((current) =>
       current.includes(day)
@@ -319,6 +437,28 @@ export default function FulfillmentPage() {
               >
                 <RefreshCw size={13} className={syncing ? "animate-spin" : ""} />
                 {syncing ? "Updating..." : "Update"}
+              </button>
+            </div>
+          )}
+
+          {activeTab === "Unfulfilled POs" && (
+            <div className="flex shrink-0 items-center gap-2 pt-1">
+              {unfulfilledSyncedAt && (
+                <span className="text-xs text-slate-400">
+                  Last synced {formatSyncedAt(unfulfilledSyncedAt)}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => void syncUnfulfilledNow()}
+                disabled={syncingUnfulfilled}
+                className="flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw
+                  size={13}
+                  className={syncingUnfulfilled ? "animate-spin" : ""}
+                />
+                {syncingUnfulfilled ? "Updating..." : "Update"}
               </button>
             </div>
           )}
@@ -420,8 +560,79 @@ export default function FulfillmentPage() {
           </table>
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
-          Unfulfilled PO sync will be added here next.
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="sticky-table-header bg-slate-50">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold text-slate-700">
+                  Order Date
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-700">
+                  Order Number
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-700">
+                  Status
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-700">
+                  # of Days
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-700">
+                  Reason for Delay
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loadingUnfulfilled ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-8 text-center text-sm text-slate-400"
+                  >
+                    Loading...
+                  </td>
+                </tr>
+              ) : unfulfilledOrders.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-8 text-center text-sm text-slate-400"
+                  >
+                    No unfulfilled orders found.
+                  </td>
+                </tr>
+              ) : (
+                unfulfilledOrders.map((order) => {
+                  const daysDelayed = order.days_delayed ?? 0;
+
+                  return (
+                    <tr key={order.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 text-slate-700">
+                        {formatDate(order.order_date)}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-slate-900">
+                        {order.order_number ?? "-"}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">
+                        {order.status ?? "Unfulfilled"}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">
+                        {daysDelayed >= 2 ? (
+                          <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                            {daysDelayed}
+                          </span>
+                        ) : (
+                          daysDelayed
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">
+                        {order.reason_for_delay ?? "-"}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       )}
 

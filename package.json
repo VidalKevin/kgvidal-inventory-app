@@ -10,6 +10,7 @@
     "deploy": "opennextjs-cloudflare build",
     "sync:shiphero-intransit": "node scripts/sync-shiphero-intransit.mjs",
     "sync:shiphero-onhold": "node scripts/sync-shiphero-onhold.mjs",
+    "sync:shiphero-unfulfilled": "node scripts/sync-shiphero-unfulfilled.mjs",
     "sync:pd-orders": "node scripts/sync-pd-shopify-orders.mjs",
     "db:vendor-settings": "node scripts/apply-vendor-settings-migration.mjs",
     "auth:admin-sql": "node scripts/generate-app-admin-sql.mjs"
